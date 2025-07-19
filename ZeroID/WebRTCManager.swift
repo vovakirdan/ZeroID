@@ -7,6 +7,10 @@ class WebRTCManager: NSObject, ObservableObject {
     private var peerConnection: RTCPeerConnection?
     private var dataChannel: RTCDataChannel?
     private var factory: RTCPeerConnectionFactory
+    
+    // Completion handlers для ожидания завершения ICE gathering
+    private var offerCompletion: ((String?) -> Void)?
+    private var answerCompletion: ((String?) -> Void)?
     private let iceServers = [
         RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
         RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"]),
@@ -22,6 +26,7 @@ class WebRTCManager: NSObject, ObservableObject {
     @Published var isConnected: Bool = false
     @Published var dataChannelState: String = "не создан"
     @Published var iceConnectionState: String = "не создан"
+    @Published var iceGatheringState: String = "не создан"
 
     override init() {
         print("[WebRTCManager] Init")
@@ -52,6 +57,10 @@ class WebRTCManager: NSObject, ObservableObject {
         // Добавляем время к каждому print
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: creating offer")
+        
+        // Сохраняем completion handler для ожидания завершения ICE gathering
+        self.offerCompletion = completion
+        
         self.peerConnection = createPeerConnection()
         let dataChannelConfig = RTCDataChannelConfiguration()
         let dc = peerConnection!.dataChannel(forLabel: "chat", configuration: dataChannelConfig)
@@ -84,7 +93,7 @@ class WebRTCManager: NSObject, ObservableObject {
                 } else {
                     print("[\(timeString4)] [WebRTC] Local description set successfully")
                 }
-                completion(sdp.sdp)
+                // НЕ вызываем completion здесь - ждем завершения ICE gathering
             })
         }
     }
@@ -93,6 +102,9 @@ class WebRTCManager: NSObject, ObservableObject {
     func receiveOffer(_ offerSDP: String, completion: @escaping (String?) -> Void) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Receiver: received offer, setting remote desc")
+        
+        // Сохраняем completion handler для ожидания завершения ICE gathering
+        self.answerCompletion = completion
         
         // Валидация SDP - только базовый trim по краям
         let cleanedSDP = offerSDP // .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,7 +161,7 @@ class WebRTCManager: NSObject, ObservableObject {
                     } else {
                         print("[\(timeString4)] [WebRTC] Local answer description set successfully")
                     }
-                    completion(answerSdp.sdp)
+                    // НЕ вызываем completion здесь - ждем завершения ICE gathering
                 })
             })
         })
@@ -248,6 +260,32 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] ICE gathering state:", newState.rawValue)
+        
+        DispatchQueue.main.async {
+            self.iceGatheringState = "ICE Gathering: \(newState.rawValue)"
+        }
+        
+        // Когда ICE gathering завершен, отдаем SDP с полными кандидатами
+        if newState == .complete {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ICE gathering completed, returning SDP")
+            
+            // Для offer
+            if let offerCompletion, peerConnection.localDescription?.type == .offer {
+                let sdp = peerConnection.localDescription?.sdp
+                print("[\(timeString2)] [WebRTC] Returning offer SDP with length:", sdp?.count ?? 0)
+                offerCompletion(sdp)
+                self.offerCompletion = nil
+            }
+            
+            // Для answer
+            if let answerCompletion, peerConnection.localDescription?.type == .answer {
+                let sdp = peerConnection.localDescription?.sdp
+                print("[\(timeString2)] [WebRTC] Returning answer SDP with length:", sdp?.count ?? 0)
+                answerCompletion(sdp)
+                self.answerCompletion = nil
+            }
+        }
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
