@@ -11,6 +11,11 @@ class WebRTCManager: NSObject, ObservableObject {
     // Completion handlers для ожидания завершения ICE gathering
     private var offerCompletion: ((String?) -> Void)?
     private var answerCompletion: ((String?) -> Void)?
+    
+    // Состояние для оптимизированного сбора кандидатов
+    private var gatherStartTime: Date?
+    private var hasRelayCandidate: Bool = false
+    private var internalCandidateCount: Int = 0
     private let iceServers = [
         RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
         RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"]),
@@ -27,6 +32,7 @@ class WebRTCManager: NSObject, ObservableObject {
     @Published var dataChannelState: String = "не создан"
     @Published var iceConnectionState: String = "не создан"
     @Published var iceGatheringState: String = "не создан"
+    @Published var candidateCount: String = "0"
 
     override init() {
         print("[WebRTCManager] Init")
@@ -40,6 +46,7 @@ class WebRTCManager: NSObject, ObservableObject {
         print("[WebRTC] Creating peerConnection")
         let config = RTCConfiguration()
         config.iceServers = iceServers
+        config.continualGatheringPolicy = .gatherContinually  // Непрерывный сбор кандидатов
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         guard let pc = factory.peerConnection(with: config, constraints: constraints, delegate: self) else {
             let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
@@ -57,6 +64,14 @@ class WebRTCManager: NSObject, ObservableObject {
         // Добавляем время к каждому print
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: creating offer")
+        
+        // Инициализируем состояние сбора кандидатов
+        self.gatherStartTime = Date()
+        self.hasRelayCandidate = false
+        self.internalCandidateCount = 0
+        DispatchQueue.main.async {
+            self.candidateCount = "0"
+        }
         
         // Сохраняем completion handler для ожидания завершения ICE gathering
         self.offerCompletion = completion
@@ -93,7 +108,7 @@ class WebRTCManager: NSObject, ObservableObject {
                 } else {
                     print("[\(timeString4)] [WebRTC] Local description set successfully")
                 }
-                // НЕ вызываем completion здесь - ждем завершения ICE gathering
+                // НЕ вызываем completion здесь - ждем достаточного количества кандидатов
             })
         }
     }
@@ -102,6 +117,14 @@ class WebRTCManager: NSObject, ObservableObject {
     func receiveOffer(_ offerSDP: String, completion: @escaping (String?) -> Void) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Receiver: received offer, setting remote desc")
+        
+        // Инициализируем состояние сбора кандидатов
+        self.gatherStartTime = Date()
+        self.hasRelayCandidate = false
+        self.internalCandidateCount = 0
+        DispatchQueue.main.async {
+            self.candidateCount = "0"
+        }
         
         // Сохраняем completion handler для ожидания завершения ICE gathering
         self.answerCompletion = completion
@@ -225,6 +248,40 @@ class WebRTCManager: NSObject, ObservableObject {
         let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString3)] [WebRTC] Message sent successfully")
     }
+    
+    // Проверка готовности для отдачи SDP
+    private func checkIfReadyToReturnSDP(_ peerConnection: RTCPeerConnection) {
+        guard let startTime = gatherStartTime else { return }
+        
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let hasAnyCandidate = internalCandidateCount > 0
+        
+        // Условия готовности:
+        // 1. Есть relay кандидат (TURN) - отдаем сразу
+        // 2. Прошло 2.5 секунды и есть хотя бы один кандидат
+        let isReady = hasRelayCandidate || (elapsedTime > 2.5 && hasAnyCandidate)
+        
+        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] Checking readiness: elapsed=\(elapsedTime)s, candidates=\(internalCandidateCount), relay=\(hasRelayCandidate), ready=\(isReady)")
+        
+        if isReady {
+            // Для offer
+            if let offerCompletion, peerConnection.localDescription?.type == .offer {
+                let sdp = peerConnection.localDescription?.sdp
+                print("[\(timeString)] [WebRTC] Returning offer SDP with length:", sdp?.count ?? 0)
+                offerCompletion(sdp)
+                self.offerCompletion = nil
+            }
+            
+            // Для answer
+            if let answerCompletion, peerConnection.localDescription?.type == .answer {
+                let sdp = peerConnection.localDescription?.sdp
+                print("[\(timeString)] [WebRTC] Returning answer SDP with length:", sdp?.count ?? 0)
+                answerCompletion(sdp)
+                self.answerCompletion = nil
+            }
+        }
+    }
 }
 
 extension WebRTCManager: RTCPeerConnectionDelegate {
@@ -265,32 +322,31 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
             self.iceGatheringState = "ICE Gathering: \(newState.rawValue)"
         }
         
-        // Когда ICE gathering завершен, отдаем SDP с полными кандидатами
+        // При завершении ICE gathering логируем, но SDP уже отдали ранее
         if newState == .complete {
             let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ICE gathering completed, returning SDP")
-            
-            // Для offer
-            if let offerCompletion, peerConnection.localDescription?.type == .offer {
-                let sdp = peerConnection.localDescription?.sdp
-                print("[\(timeString2)] [WebRTC] Returning offer SDP with length:", sdp?.count ?? 0)
-                offerCompletion(sdp)
-                self.offerCompletion = nil
-            }
-            
-            // Для answer
-            if let answerCompletion, peerConnection.localDescription?.type == .answer {
-                let sdp = peerConnection.localDescription?.sdp
-                print("[\(timeString2)] [WebRTC] Returning answer SDP with length:", sdp?.count ?? 0)
-                answerCompletion(sdp)
-                self.answerCompletion = nil
-            }
+            print("[\(timeString2)] [WebRTC] ICE gathering completed (SDP already returned)")
         }
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] ICE candidate generated")
+        
+        // Увеличиваем счетчик кандидатов
+        internalCandidateCount += 1
+        DispatchQueue.main.async {
+            self.candidateCount = "\(self.internalCandidateCount)"
+        }
+        
+        // Проверяем, является ли это relay кандидатом (TURN)
+        if candidate.sdp.contains(" typ relay") {
+            hasRelayCandidate = true
+            print("[\(timeString)] [WebRTC] Relay candidate detected!")
+        }
+        
+        // Проверяем готовность для отдачи SDP
+        checkIfReadyToReturnSDP(peerConnection)
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {
