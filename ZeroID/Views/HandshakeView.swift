@@ -67,7 +67,8 @@ struct HandshakeView: View {
             .padding(.bottom, 14)
             
             if isLoading {
-                LoaderView()
+                LoaderView(text: "Подключение...")
+                    .background(Color.black.opacity(0.05).ignoresSafeArea())
             }
             
             PrimaryButton(title: step == .offer ? "Подтвердить Answer" : "Сгенерировать Answer", action: onContinue)

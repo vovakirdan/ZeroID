@@ -50,21 +50,23 @@ struct ChatView: View {
             
             // Чат
             if !vm.webrtc.isConnected {
-                Text("⚠️ Ожидание установки соединения...")
-                    .foregroundColor(.orange)
-                    .padding()
-            }
-            
-            List(vm.messages) { msg in
-                HStack {
-                    if msg.isMine { Spacer() }
-                    Text(msg.text)
-                        .padding(8)
-                        .background(msg.isMine ? Color.blue : Color.gray.opacity(0.3))
-                        .foregroundColor(msg.isMine ? .white : .black)
-                        .cornerRadius(8)
-                    if !msg.isMine { Spacer() }
+                VStack(spacing: 16) {
+                    LoaderView(text: "Ждём соединения...")
+                    Text("⚠️ Ожидание установки соединения...")
+                        .foregroundColor(.orange)
+                        .font(.caption)
                 }
+                .padding()
+            } else {
+                List(vm.messages) { msg in
+                    ChatBubble(
+                    text: msg.text,
+                    isMine: msg.isMine,
+                    timestamp: msg.date
+                )
+                    .listRowSeparator(.hidden)
+                }
+                .listStyle(.plain)
             }
             
             HStack {

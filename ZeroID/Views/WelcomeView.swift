@@ -3,6 +3,7 @@ import SwiftUI
 struct WelcomeView: View {
     var onCreate: () -> Void
     var onJoin: () -> Void
+    var onSettings: () -> Void
     
     var body: some View {
         VStack(spacing: 40) {
@@ -30,6 +31,18 @@ struct WelcomeView: View {
                 PrimaryButton(title: "Создать соединение", action: onCreate)
                 SecondaryButton(title: "Принять соединение", action: onJoin)
             }
+            .padding(.bottom, 16)
+            
+            // Кнопка настроек
+            Button(action: onSettings) {
+                HStack(spacing: 8) {
+                    Image(systemName: "gearshape")
+                        .font(.body)
+                    Text("Настройки")
+                        .font(.body)
+                }
+                .foregroundColor(.secondary)
+            }
             .padding(.bottom, 32)
         }
         .padding(.horizontal)
@@ -40,7 +53,8 @@ struct WelcomeView: View {
 #Preview {
     WelcomeView(
         onCreate: {},
-        onJoin: {}
+        onJoin: {},
+        onSettings: {}
     )
 }
 
