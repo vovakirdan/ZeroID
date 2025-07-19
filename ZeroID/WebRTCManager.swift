@@ -93,9 +93,34 @@ class WebRTCManager: NSObject, ObservableObject {
     func receiveOffer(_ offerSDP: String, completion: @escaping (String?) -> Void) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Receiver: received offer, setting remote desc")
+        
+        // Валидация SDP - только базовый trim по краям
+        let cleanedSDP = offerSDP // .trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[\(timeString)] [WebRTC] Offer SDP length:", cleanedSDP.count)
+        
+        if cleanedSDP.isEmpty {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ERROR: Offer SDP is empty")
+            completion(nil)
+            return
+        }
+        
+        // Проверяем, что SDP начинается с правильного формата
+        if !cleanedSDP.hasPrefix("v=0") {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ERROR: Offer SDP has invalid format (should start with 'v=0')")
+            print("[\(timeString2)] [WebRTC] SDP starts with:", String(cleanedSDP.prefix(10)))
+            completion(nil)
+            return
+        }
+        
+        // Детальное логирование SDP для диагностики
+        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString2)] [WebRTC] Offer SDP content (first 100 chars):", String(cleanedSDP.prefix(100)))
+        
         self.peerConnection = createPeerConnection()
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-        let sdp = RTCSessionDescription(type: .offer, sdp: offerSDP)
+        let sdp = RTCSessionDescription(type: .offer, sdp: cleanedSDP)
         peerConnection?.setRemoteDescription(sdp, completionHandler: { [weak self] error in
             let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
             if let error = error {
@@ -134,12 +159,36 @@ class WebRTCManager: NSObject, ObservableObject {
     func receiveAnswer(_ answerSDP: String) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: received answer, setting remote desc")
-        guard let pc = self.peerConnection else { 
+        
+        // Валидация SDP - только базовый trim по краям
+        let cleanedSDP = answerSDP // .trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[\(timeString)] [WebRTC] Answer SDP length:", cleanedSDP.count)
+        
+        if cleanedSDP.isEmpty {
             let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ERROR: No peer connection for answer")
+            print("[\(timeString2)] [WebRTC] ERROR: Answer SDP is empty")
+            return
+        }
+        
+        // Проверяем, что SDP начинается с правильного формата
+        if !cleanedSDP.hasPrefix("v=0") {
+            let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString3)] [WebRTC] ERROR: Answer SDP has invalid format (should start with 'v=0')")
+            print("[\(timeString3)] [WebRTC] SDP starts with:", String(cleanedSDP.prefix(10)))
+            return
+        }
+        
+        // Детальное логирование SDP для диагностики
+        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString2)] [WebRTC] Answer SDP content (first 100 chars):", String(cleanedSDP.prefix(100)))
+        
+        guard let pc = self.peerConnection else { 
+            let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString3)] [WebRTC] ERROR: No peer connection for answer")
             return 
         }
-        let sdp = RTCSessionDescription(type: .answer, sdp: answerSDP)
+        
+        let sdp = RTCSessionDescription(type: .answer, sdp: cleanedSDP)
         pc.setRemoteDescription(sdp, completionHandler: { err in
             let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
             if let err = err {

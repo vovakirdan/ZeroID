@@ -49,12 +49,21 @@ struct ContentView: View {
             if case .offerGenerated(let offerSDP) = connectionState {
                 Text("Скопируй этот Offer и отправь другому клиенту:")
                     .padding(.top)
-                TextEditor(text: .constant(offerSDP))
+                VStack {
+                    TextEditor(text: .constant(offerSDP))
+                        .frame(height: 150)
+                        .border(Color.gray)
+                    Button("Копировать Offer") {
+                        UIPasteboard.general.string = offerSDP
+                    }
+                    .padding(.horizontal)
+                }
+                .padding()
+                Text("Вставь сюда Answer, полученный от peer:")
+                    .padding(.top)
+                TextEditor(text: $remoteSDP)
                     .frame(height: 150)
                     .border(Color.gray)
-                    .padding()
-                TextField("Вставь сюда Answer, полученный от peer", text: $remoteSDP)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
                     .padding()
                 Button("Подтвердить Answer") {
                     vm.webrtc.receiveAnswer(remoteSDP)
@@ -82,10 +91,16 @@ struct ContentView: View {
             }
             if case .answerGenerated(let answerSDP) = connectionState {
                 Text("Скопируй этот Answer и отправь peer'у:")
-                TextEditor(text: .constant(answerSDP))
-                    .frame(height: 150)
-                    .border(Color.gray)
-                    .padding()
+                VStack {
+                    TextEditor(text: .constant(answerSDP))
+                        .frame(height: 150)
+                        .border(Color.gray)
+                    Button("Копировать Answer") {
+                        UIPasteboard.general.string = answerSDP
+                    }
+                    .padding(.horizontal)
+                }
+                .padding()
                 Text("Ожидание соединения...")
                     .foregroundColor(.gray)
                     .padding()
