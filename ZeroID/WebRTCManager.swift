@@ -76,6 +76,16 @@ class WebRTCManager: NSObject, ObservableObject {
         // Сохраняем completion handler для ожидания завершения ICE gathering
         self.offerCompletion = completion
         
+        // Резервный таймер на 2.6 секунды для отдачи SDP
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { [weak self] in
+            guard let self = self,
+                  let pc = self.peerConnection,
+                  self.offerCompletion != nil else { return }
+            let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString)] [WebRTC] Timer triggered - checking readiness again")
+            self.checkIfReadyToReturnSDP(pc)
+        }
+        
         self.peerConnection = createPeerConnection()
         let dataChannelConfig = RTCDataChannelConfiguration()
         let dc = peerConnection!.dataChannel(forLabel: "chat", configuration: dataChannelConfig)
@@ -128,6 +138,16 @@ class WebRTCManager: NSObject, ObservableObject {
         
         // Сохраняем completion handler для ожидания завершения ICE gathering
         self.answerCompletion = completion
+        
+        // Резервный таймер на 2.6 секунды для отдачи SDP
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { [weak self] in
+            guard let self = self,
+                  let pc = self.peerConnection,
+                  self.answerCompletion != nil else { return }
+            let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString)] [WebRTC] Timer triggered - checking readiness again")
+            self.checkIfReadyToReturnSDP(pc)
+        }
         
         // Валидация SDP - только базовый trim по краям
         let cleanedSDP = offerSDP // .trimmingCharacters(in: .whitespacesAndNewlines)
