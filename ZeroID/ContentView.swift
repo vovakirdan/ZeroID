@@ -91,7 +91,26 @@ struct ContentView: View {
                     .padding()
             }
             if connectionState == .connected {
-                chatView
+                VStack {
+                    // Статус соединения для дебага
+                    VStack(spacing: 4) {
+                        Text("DataChannel: \(vm.webrtc.dataChannelState)")
+                            .font(.caption)
+                            .foregroundColor(vm.webrtc.isConnected ? .green : .orange)
+                        Text("ICE: \(vm.webrtc.iceConnectionState)")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        Text("Соединение: \(vm.webrtc.isConnected ? "активно" : "не готово")")
+                            .font(.caption)
+                            .foregroundColor(vm.webrtc.isConnected ? .green : .red)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    chatView
+                }
             }
             if case .error(let err) = connectionState {
                 Text("Ошибка: \(err)").foregroundColor(.red)
@@ -103,15 +122,23 @@ struct ContentView: View {
             }
         }
         .onReceive(vm.webrtc.$isConnected) { connected in
-                if connected && connectionState != .connected {
-                    connectionState = .connected
-                }
+            print("[ContentView] isConnected changed to:", connected)
+            if connected && connectionState != .connected {
+                print("[ContentView] Transitioning to connected state")
+                connectionState = .connected
+            }
         }
         .padding()
     }
 
     var chatView: some View {
         VStack {
+            if !vm.webrtc.isConnected {
+                Text("⚠️ Ожидание установки соединения...")
+                    .foregroundColor(.orange)
+                    .padding()
+            }
+            
             List(vm.messages) { msg in
                 HStack {
                     if msg.isMine { Spacer() }
@@ -126,7 +153,14 @@ struct ContentView: View {
             HStack {
                 TextField("Сообщение", text: $vm.inputText)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                Button("Отправить") { vm.sendMessage() }
+                Button("Отправить") { 
+                    if vm.webrtc.isConnected {
+                        vm.sendMessage() 
+                    } else {
+                        print("[ContentView] Cannot send message - not connected")
+                    }
+                }
+                .disabled(!vm.webrtc.isConnected)
             }
             .padding()
         }
