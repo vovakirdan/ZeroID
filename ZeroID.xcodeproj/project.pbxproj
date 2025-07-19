@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		33BE35F52E2BBECE002F7788 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 33BE35F42E2BBECE002F7788 /* WebRTC */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		3313453B2E2BB43F00307BD4 /* ZeroID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZeroID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				33BE35F52E2BBECE002F7788 /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -64,8 +69,6 @@
 				3313453D2E2BB43F00307BD4 /* ZeroID */,
 			);
 			name = ZeroID;
-			packageProductDependencies = (
-			);
 			productName = ZeroID;
 			productReference = 3313453B2E2BB43F00307BD4 /* ZeroID.app */;
 			productType = "com.apple.product-type.application";
@@ -94,6 +97,9 @@
 			);
 			mainGroup = 331345322E2BB43F00307BD4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				33BE35F32E2BBECE002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3313453C2E2BB43F00307BD4 /* Products */;
 			projectDirPath = "";
@@ -324,6 +330,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		33BE35F32E2BBECE002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 138.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		33BE35F42E2BBECE002F7788 /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 33BE35F32E2BBECE002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 331345332E2BB43F00307BD4 /* Project object */;
 }
