@@ -24,8 +24,11 @@ class WebRTCManager: NSObject, ObservableObject {
         let config = RTCConfiguration()
         config.iceServers = iceServers
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-        let pc = factory.peerConnection(with: config, constraints: constraints, delegate: self)
-        return pc.unsafelyUnwrapped
+        guard let pc = factory.peerConnection(with: config, constraints: constraints, delegate: self) else {
+            fatalError("Failed to create RTCPeerConnection")
+        }
+        self.peerConnection = pc
+        return pc
     }
 
     // Создать оффер (инициатор)
