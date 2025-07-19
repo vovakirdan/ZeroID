@@ -87,3 +87,15 @@ enum HandshakeStep {
     case answer
 }
 
+#Preview {
+    HandshakeView(
+        step: .offer,
+        sdpText: "sdpText",
+        remoteSDP: .constant("remoteSDP"),
+        onCopy: {},
+        onPaste: {},
+        onContinue: {},
+        onBack: {},
+        isLoading: false
+    )
+}
