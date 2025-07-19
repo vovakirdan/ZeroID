@@ -8,6 +8,8 @@ class ChatViewModel: ObservableObject {
     @Published var inputText: String = ""
 
     let webrtc = WebRTCManager()
+    
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         webrtc.$receivedMessage
@@ -17,8 +19,6 @@ class ChatViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
-
-    private var cancellables = Set<AnyCancellable>()
 
     func sendMessage() {
         guard !inputText.isEmpty else { return }

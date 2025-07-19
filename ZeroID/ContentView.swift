@@ -86,10 +86,9 @@ struct ContentView: View {
                     .frame(height: 150)
                     .border(Color.gray)
                     .padding()
-                Button("Перейти в чат") {
-                    connectionState = .connected
-                }
-                .padding()
+                Text("Ожидание соединения...")
+                    .foregroundColor(.gray)
+                    .padding()
             }
             if connectionState == .connected {
                 chatView
@@ -102,6 +101,11 @@ struct ContentView: View {
                     remoteSDP = ""
                 }
             }
+        }
+        .onReceive(vm.webrtc.$isConnected) { connected in
+                if connected && connectionState != .connected {
+                    connectionState = .connected
+                }
         }
         .padding()
     }

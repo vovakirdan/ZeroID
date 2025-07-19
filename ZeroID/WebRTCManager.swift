@@ -8,10 +8,18 @@ class WebRTCManager: NSObject, ObservableObject {
     private var dataChannel: RTCDataChannel?
     private var factory: RTCPeerConnectionFactory
     private let iceServers = [
-        RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])
+        RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
+        RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"]),
+        RTCIceServer(urlStrings: ["stun:stun2.l.google.com:19302"]),
+        RTCIceServer(urlStrings: ["stun:stun3.l.google.com:19302"]),
+        RTCIceServer(urlStrings: ["stun:stun4.l.google.com:19302"]),
+        RTCIceServer(urlStrings: ["turn:relay1.expressturn.com:3480"],  // это временные, их можно на публику
+                     username: "000000002067703673",
+                     credential: "aUS5WkBI4dk568G6L/uv7ZQvBAQ=")
     ]
 
     @Published var receivedMessage: String = ""
+    @Published var isConnected: Bool = false
 
     override init() {
         RTCInitializeSSL()
@@ -93,11 +101,20 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
         self.dataChannel = dataChannel
         dataChannel.delegate = self
+        DispatchQueue.main.async {
+            self.isConnected = true
+        }
     }
 }
 
 extension WebRTCManager: RTCDataChannelDelegate {
-    func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {}
+    func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
+        if dataChannel.readyState == .open {
+            DispatchQueue.main.async {
+                self.isConnected = true
+            }
+        }
+    }
 
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         if let text = String(data: buffer.data, encoding: .utf8) {
