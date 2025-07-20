@@ -153,7 +153,7 @@ struct ChatView: View {
             Rectangle()
                 .fill(
                     colorScheme == .dark 
-                    ? Color.black.opacity(0.9) 
+                    ? Color.black.opacity(0.9)
                     : Color.white.opacity(0.9)
                 )
                 .ignoresSafeArea(edges: .bottom)
