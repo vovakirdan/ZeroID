@@ -194,7 +194,7 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.surfacePrimary)
-        .cornerRadius(20, corners: [.topLeft, .topRight])
+        .cornerRadius(20, corners: [.topLeft, .topRight, .bottomLeft, .bottomRight])
         .shadow(radius: 10)
     }
     

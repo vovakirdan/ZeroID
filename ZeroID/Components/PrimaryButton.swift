@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PrimaryButton: View {
     let title: String
+    let arrow: Bool
     let action: () -> Void
     
     var body: some View {
@@ -9,8 +10,10 @@ struct PrimaryButton: View {
             HStack(spacing: 8) {
                 Text(title)
                     .fontWeight(.semibold)
-                Image(systemName: "arrow.right")
-                    .font(.body)
+                if arrow {
+                    Image(systemName: "arrow.right")
+                        .font(.body)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding()

@@ -21,7 +21,7 @@ struct ErrorView: View {
                 .multilineTextAlignment(.center)
                 .foregroundColor(Color.textSecondary)
             
-            PrimaryButton(title: "Назад", action: onBack)
+            PrimaryButton(title: "Назад", arrow: false, action: onBack)
             
             Spacer()
         }

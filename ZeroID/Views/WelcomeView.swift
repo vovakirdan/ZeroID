@@ -56,7 +56,7 @@ struct WelcomeView: View {
             Spacer()
             
             VStack(spacing: 16) {
-                PrimaryButton(title: "Начать чат", action: onCreate)
+                PrimaryButton(title: "Начать чат", arrow: true, action: onCreate)
                 SecondaryButton(title: "Настройки", action: onSettings)
             }
             .padding(.bottom, 16)

@@ -97,6 +97,7 @@ struct HandshakeView: View {
             if let buttonConfig = getButtonConfig() {
                 PrimaryButton(
                     title: buttonConfig.title,
+                    arrow: false,
                     action: buttonConfig.action
                 )
                 .disabled(buttonConfig.isDisabled)
