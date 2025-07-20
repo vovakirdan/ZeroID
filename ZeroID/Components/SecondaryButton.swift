@@ -6,13 +6,17 @@ struct SecondaryButton: View {
     
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .fontWeight(.regular)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.secondary)
-                .foregroundColor(.accentColor)
-                .cornerRadius(14)
+            HStack(spacing: 8) {
+                Image(systemName: "gearshape")
+                    .font(.body)
+                Text(title)
+                    .fontWeight(.regular)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.surfaceSecondary)
+            .foregroundColor(.white)
+            .cornerRadius(14)
         }
     }
 }

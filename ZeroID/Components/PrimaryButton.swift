@@ -6,13 +6,17 @@ struct PrimaryButton: View {
     
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.accentColor)
-                .foregroundColor(Color.primary)
-                .cornerRadius(14)
+            HStack(spacing: 8) {
+                Text(title)
+                    .fontWeight(.semibold)
+                Image(systemName: "arrow.right")
+                    .font(.body)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.primaryGradient)
+            .foregroundColor(.white)
+            .cornerRadius(14)
         }
     }
 }

@@ -21,5 +21,14 @@ extension Color {
     static let warning = Color.orange
     static let error = Color.destructive
     static let info = Color.accentColor
+    
+    // Градиент для кнопок и акцентов
+    static var primaryGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.gradientStart, Color.gradientEnd],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
 }
 

@@ -9,44 +9,95 @@ struct WelcomeView: View {
         VStack(spacing: 40) {
             Spacer()
             
-            // Логотип
-            Image(systemName: "bubble.left.and.bubble.right.fill")
+            // Логотип с градиентом
+            Image(systemName: "shield.fill")
                 .resizable()
                 .frame(width: 80, height: 80)
-                .foregroundColor(.accentColor)
+                .foregroundStyle(Color.primaryGradient)
                 .padding(.bottom, 8)
             
-            Text("ZeroID")
-                .font(.largeTitle.bold())
-                .foregroundColor(Color.textPrimary)
+            // Заголовок с акцентами
+            VStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    Text("[")
+                        .font(.largeTitle.bold())
+                        .foregroundColor(Color.gradientStart)
+                    Text("ZeroId")
+                        .font(.largeTitle.bold())
+                        .foregroundColor(.white)
+                    Text("]")
+                        .font(.largeTitle.bold())
+                        .foregroundColor(Color.gradientEnd)
+                }
+                
+                Text("Супер секретный чат с end-to-end шифрованием")
+                    .font(.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(Color.textSecondary)
+            }
             
-            Text("P2P чат без серверов\nБыстро. Безопасно. Приватно.")
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundColor(Color.textSecondary)
+            Spacer()
+            
+            // Информационные карточки
+            VStack(spacing: 16) {
+                InfoCard(
+                    icon: "bubble.left.and.bubble.right.fill",
+                    title: "Приватные сообщения",
+                    description: "Никто не может прочитать ваши сообщения"
+                )
+                
+                InfoCard(
+                    icon: "person.2.fill",
+                    title: "P2P соединение",
+                    description: "Прямое соединение без серверов"
+                )
+            }
             
             Spacer()
             
             VStack(spacing: 16) {
-                PrimaryButton(title: "Создать соединение", action: onCreate)
-                SecondaryButton(title: "Принять соединение", action: onJoin)
+                PrimaryButton(title: "Начать чат", action: onCreate)
+                SecondaryButton(title: "Настройки", action: onSettings)
             }
             .padding(.bottom, 16)
             
-            // Кнопка настроек
-            Button(action: onSettings) {
-                HStack(spacing: 8) {
-                    Image(systemName: "gearshape")
-                        .font(.body)
-                    Text("Настройки")
-                        .font(.body)
-                }
+            Text("Для начала чата создайте QR-код или отсканируйте существующий")
+                .font(.caption)
                 .foregroundColor(Color.textSecondary)
-            }
-            .padding(.bottom, 32)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 32)
         }
         .padding(.horizontal)
         .background(Color("Background"))
+    }
+}
+
+struct InfoCard: View {
+    let icon: String
+    let title: String
+    let description: String
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(Color.primaryGradient)
+                .frame(width: 40, height: 40)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(Color.textSecondary)
+            }
+            
+            Spacer()
+        }
+        .padding(16)
+        .background(Color.surfaceSecondary)
+        .cornerRadius(12)
     }
 }
 
