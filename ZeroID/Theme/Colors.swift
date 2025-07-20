@@ -34,5 +34,14 @@ extension Color {
             endPoint: .trailing
         )
     }
+    
+    // Градиент для фонового слоя чата (по умолчанию одинаковые цвета)
+    static var chatBackgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.chatBackgroundStart, Color.chatBackgroundEnd],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 

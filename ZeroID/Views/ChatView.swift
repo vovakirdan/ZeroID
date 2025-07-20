@@ -5,34 +5,13 @@ struct ChatView: View {
     let connectionState: ConnectionState
     let onBack: () -> Void
     @Environment(\.colorScheme) var colorScheme
+    // Переключатель отображения информации о соединении
+    @State private var showConnectionInfo: Bool = false
     
-    // Адаптивный градиентный фон чата
+    // Единый градиентный фон чата (цвета берутся из Assets)
     private var chatBackground: some View {
-        if colorScheme == .dark {
-            // Темная тема - градиент темно-синих оттенков
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.0, green: 0.05, blue: 0.1),
-                    Color(red: 0.05, green: 0.1, blue: 0.15),
-                    Color(red: 0.02, green: 0.08, blue: 0.12)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        Color.chatBackgroundGradient
             .ignoresSafeArea(.all)
-        } else {
-            // Светлая тема - светлый градиент
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.95, green: 0.97, blue: 1.0),
-                    Color(red: 0.92, green: 0.95, blue: 0.98),
-                    Color(red: 0.90, green: 0.93, blue: 0.96)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea(.all)
-        }
     }
     
     // Состояние ожидания соединения
@@ -75,8 +54,6 @@ struct ChatView: View {
     // Область чата
     private var chatArea: some View {
         ZStack {
-            chatBackground
-            
             if !vm.webrtc.isConnected {
                 waitingConnectionView
             } else {
@@ -174,28 +151,37 @@ struct ChatView: View {
         }
     }
     
-    // Заголовок с кнопкой назад
+    // Заголовок с кнопками Назад и Info
     private var headerView: some View {
         HStack {
+            // Кнопка назад
             Button(action: onBack) {
                 Image(systemName: "chevron.backward")
                     .font(.title2)
                     .foregroundColor(Color.accentColor)
             }
-            .padding(.leading, 4)
             
             Spacer()
             
             Text("Секретный чат")
                 .font(.headline)
                 .foregroundColor(Color.textPrimary)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
             
             Spacer()
+            
+            // Кнопка info
+            Button(action: { showConnectionInfo.toggle() }) {
+                Image(systemName: "info.circle")
+                    .font(.title2)
+                    .foregroundColor(Color.accentColor)
+            }
         }
         .padding(.horizontal)
     }
     
-    // Статус соединения для дебага
+    // Статус соединения для дебага (показываем, когда showConnectionInfo == true)
     private var connectionStatusView: some View {
         VStack(spacing: 4) {
             Text("DataChannel: \(vm.webrtc.dataChannelState)")
@@ -228,13 +214,15 @@ struct ChatView: View {
     }
     
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             headerView
-            connectionStatusView
+            if showConnectionInfo {
+                connectionStatusView
+            }
             chatArea
             inputArea
         }
-        .background(Color.background)
+        .background(chatBackground)
         .navigationBarHidden(true)
     }
 }
