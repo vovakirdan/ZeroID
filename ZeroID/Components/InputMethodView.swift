@@ -15,6 +15,8 @@ struct InputMethodView: View {
             
             // Переключатель способов ввода
             HStack(spacing: 8) {
+                Spacer()
+                
                 InputMethodButton(
                     icon: "text.cursor",
                     title: "Текст",
@@ -41,38 +43,27 @@ struct InputMethodView: View {
                 Spacer()
             }
             
-            
-            
             if showingTextInput {
-                VStack(spacing: 8) {
-                    HStack {
-                        TextEditor(text: $inputText)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(height: 100)
-                            .cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderPrimary, lineWidth: 1))
-                        
-                        VStack(spacing: 8) {
-                            Button(action: {
-                                if let clipboard = UIPasteboard.general.string {
-                                    inputText = clipboard
-                                    onPaste()
-                                }
-                            }) {
-                                Image(systemName: "doc.on.clipboard")
-                                    .font(.title3)
-                                    .foregroundColor(.accentColor)
+                HStack {
+                    TextField("", text: $inputText)
+                        .font(.system(.body, design: .monospaced))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    
+                    Button(action: {
+                        if inputText.isEmpty {
+                            // Кнопка Paste
+                            if let clipboard = UIPasteboard.general.string {
+                                inputText = clipboard
+                                onPaste()
                             }
-                            
-                            Button(action: {
-                                inputText = ""
-                            }) {
-                                Image(systemName: "trash")
-                                    .font(.title3)
-                                    .foregroundColor(.destructive)
-                            }
+                        } else {
+                            // Кнопка Delete
+                            inputText = ""
                         }
-                        .padding(.trailing, 4)
+                    }) {
+                        Image(systemName: inputText.isEmpty ? "doc.on.clipboard" : "trash")
+                            .font(.title3)
+                            .foregroundColor(inputText.isEmpty ? .accentColor : .destructive)
                     }
                 }
             } else {
