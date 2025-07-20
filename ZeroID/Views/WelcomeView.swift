@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WelcomeView: View {
     var onCreate: () -> Void
-    var onJoin: () -> Void
     var onSettings: () -> Void
     
     var body: some View {
@@ -106,7 +105,6 @@ struct InfoCard: View {
 #Preview {
     WelcomeView(
         onCreate: {},
-        onJoin: {},
         onSettings: {}
     )
 }

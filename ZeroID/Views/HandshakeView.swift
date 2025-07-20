@@ -63,30 +63,11 @@ struct HandshakeView: View {
             
             // Показываем поле для вставки только когда нужно
             if shouldShowPasteField() {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(getPasteFieldLabel())
-                        .font(.caption)
-                        .foregroundColor(Color.textSecondary)
-                    
-                    HStack {
-                        TextEditor(text: $remoteSDP)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(height: 100)
-                            .cornerRadius(10)
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(.systemGray5), lineWidth: 1))
-                        Button(action: {
-                            if let clipboard = UIPasteboard.general.string {
-                                remoteSDP = clipboard
-                                onPaste()
-                            }
-                        }) {
-                            Image(systemName: "doc.on.clipboard")
-                                .font(.title3)
-                                .foregroundColor(.accentColor)
-                        }
-                        .padding(.trailing, 4)
-                    }
-                }
+                InputMethodView(
+                    label: getPasteFieldLabel(),
+                    inputText: $remoteSDP,
+                    onPaste: onPaste
+                )
                 .padding(.bottom, 14)
             }
             

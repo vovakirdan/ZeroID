@@ -18,6 +18,7 @@ enum ConnectionState: Equatable {
 
 enum Screen {
     case welcome
+    case choice
     case handshakeOffer
     case handshakeAnswer
     case chat
@@ -44,14 +45,7 @@ struct ContentView: View {
                     WelcomeView(
                         onCreate: { 
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                screen = .handshakeOffer
-                            }
-                            createOffer()
-                        },
-                        onJoin: { 
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                screen = .handshakeAnswer
-                                answerState = .waitingOffer
+                                screen = .choice
                             }
                         },
                         onSettings: {
@@ -76,6 +70,39 @@ struct ContentView: View {
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
+                                }
+                            }
+                    )
+                    
+                case .choice:
+                    ChoiceView(
+                        onCreateOffer: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .handshakeOffer
+                            }
+                            createOffer()
+                        },
+                        onAcceptOffer: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .handshakeAnswer
+                                answerState = .waitingOffer
+                            }
+                        },
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        }
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
                                 }
                             }
                     )
