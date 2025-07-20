@@ -69,6 +69,16 @@ struct ContentView: View {
                             }
                         }
                     )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                }
+                            }
+                    )
                     
                 case .handshakeOffer:
                     HandshakeView(
@@ -105,6 +115,17 @@ struct ContentView: View {
                             resetState()
                         },
                         isLoading: isLoading
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
                     )
                     
                 case .handshakeAnswer:
@@ -153,6 +174,17 @@ struct ContentView: View {
                         },
                         isLoading: isLoading
                     )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
+                    )
                     
                 case .chat:
                     ChatView(
@@ -164,6 +196,17 @@ struct ContentView: View {
                             }
                             resetState()
                         }
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
                     )
                     
                 case .error(let error):

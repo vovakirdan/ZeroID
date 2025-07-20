@@ -17,18 +17,17 @@ struct HandshakeView: View {
 
     var body: some View {
         VStack {
+            // Apple-style кнопка назад
             HStack {
                 Button(action: onBack) {
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "chevron.backward")
                         .font(.title2)
-                        .foregroundColor(.accentColor)
-                        .padding(8)
-                        .background(Color.surfaceMuted)
-                        .clipShape(Circle())
+                        .foregroundColor(Color.accentColor)
                 }
+                .padding(.leading, 4)
                 Spacer()
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, 8)
             
             StepHeader(
                 title: step == .offer ? "Обмен оффером" : "Обмен ответом",
@@ -65,7 +64,7 @@ struct HandshakeView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(getPasteFieldLabel())
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                     
                     HStack {
                         TextEditor(text: $remoteSDP)
@@ -109,7 +108,7 @@ struct HandshakeView: View {
                 VStack(spacing: 12) {
                     Text("Скоро будут поддерживаться:")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.textSecondary)
                     
                     HStack(spacing: 16) {
                         FutureTransferButton(
@@ -138,7 +137,8 @@ struct HandshakeView: View {
         }
         .padding(.horizontal)
         .animation(.easeInOut, value: isLoading)
-        .background(Color.background.ignoresSafeArea())
+        .background(Color.background)
+        .navigationBarHidden(true)
         .sheet(isPresented: $showShareSheet) {
             ActivityView(activityItems: [sdpText])
         }

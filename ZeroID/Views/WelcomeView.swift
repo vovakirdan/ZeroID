@@ -24,7 +24,7 @@ struct WelcomeView: View {
                         .foregroundColor(Color.gradientStart)
                     Text("ZeroId")
                         .font(.largeTitle.bold())
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.textPrimary)
                     Text("]")
                         .font(.largeTitle.bold())
                         .foregroundColor(Color.gradientEnd)
@@ -68,7 +68,8 @@ struct WelcomeView: View {
                 .padding(.bottom, 32)
         }
         .padding(.horizontal)
-        .background(Color("Background"))
+        .background(Color.background)
+        .navigationBarHidden(true)
     }
 }
 
@@ -87,7 +88,7 @@ struct InfoCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.textPrimary)
                 Text(description)
                     .font(.caption)
                     .foregroundColor(Color.textSecondary)

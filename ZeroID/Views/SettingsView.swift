@@ -4,7 +4,27 @@ struct SettingsView: View {
     let onBack: () -> Void
     
     var body: some View {
-        NavigationView {
+        VStack(spacing: 0) {
+            // Apple-style заголовок с кнопкой назад
+            HStack {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.backward")
+                        .font(.title2)
+                        .foregroundColor(Color.accentColor)
+                }
+                .padding(.leading, 4)
+                
+                Spacer()
+                
+                Text("Настройки")
+                    .font(.headline)
+                    .foregroundColor(Color.textPrimary)
+                
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            
             List {
                 Section("Общие") {
                     HStack {
@@ -67,14 +87,10 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Настройки")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Назад", action: onBack)
-                }
-            }
+            .listStyle(.insetGrouped)
         }
+        .background(Color.background)
+        .navigationBarHidden(true)
     }
 }
 

@@ -15,7 +15,7 @@ struct SecondaryButton: View {
             .frame(maxWidth: .infinity)
             .padding()
             .background(Color.surfaceSecondary)
-            .foregroundColor(.white)
+            .foregroundColor(Color.textPrimary)
             .cornerRadius(14)
         }
     }

@@ -6,30 +6,66 @@ struct ChatBubble: View {
     let timestamp: Date
     
     var body: some View {
-        HStack {
-            if isMine { Spacer() }
-            
-            VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
-                Text(text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(isMine ? Color.accentColor : Color.secondary)
-                    )
-                    .foregroundColor(isMine ? Color.primary : Color.textPrimary)
-                    .shadow(color: Color.foreground.opacity(0.06), radius: 1, x: 0, y: 1)
-                
-                Text(timestamp, style: .time)
-                    .font(.caption2)
-                    .foregroundColor(Color.textSecondary)
-                    .padding(.horizontal, 4)
+        HStack(alignment: .bottom, spacing: 0) {
+            if isMine { 
+                Spacer(minLength: 60)
             }
             
-            if !isMine { Spacer() }
+            VStack(alignment: isMine ? .trailing : .leading, spacing: 2) {
+                HStack {
+                    if isMine {
+                        Spacer()
+                    }
+                    
+                    Text(text)
+                        .font(.body)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(isMine ? 
+                                    AnyShapeStyle(Color.primaryGradient) : 
+                                    AnyShapeStyle(Color(red: 0.15, green: 0.15, blue: 0.15, opacity: 0.85))
+                                )
+                        )
+                        .foregroundColor(isMine ? .white : Color(red: 0.9, green: 0.9, blue: 0.9))
+                        .overlay(alignment: isMine ? .bottomTrailing : .bottomLeading) {
+                            // Apple-style хвостик пузырька
+                            if isMine {
+                                // Хвостик справа для моих сообщений
+                                Image(systemName: "arrowtriangle.down.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.primaryGradient)
+                                    .rotationEffect(.degrees(45))
+                                    .offset(x: 8, y: 8)
+                            } else {
+                                // Хвостик слева для чужих сообщений
+                                Image(systemName: "arrowtriangle.down.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(Color(red: 0.15, green: 0.15, blue: 0.15, opacity: 0.85))
+                                    .rotationEffect(.degrees(-45))
+                                    .offset(x: -8, y: 8)
+                            }
+                        }
+                    
+                    if !isMine {
+                        Spacer()
+                    }
+                }
+                
+                // Время сообщения
+                Text(timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(Color(red: 0.7, green: 0.7, blue: 0.7))
+                    .padding(.horizontal, isMine ? 20 : 16)
+            }
+            
+            if !isMine { 
+                Spacer(minLength: 60)
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: text)
     }
 }

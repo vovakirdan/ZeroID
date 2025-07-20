@@ -12,7 +12,7 @@ struct CopyField: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
             
             HStack(alignment: .center) {
                 TextEditor(text: .constant(value))

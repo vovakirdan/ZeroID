@@ -17,7 +17,7 @@ struct StepHeader: View {
                 .multilineTextAlignment(.center)
             Text(subtitle)
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(.bottom, 18)

@@ -26,7 +26,8 @@ struct ErrorView: View {
             Spacer()
         }
         .padding(.horizontal)
-        .background(Color.background.ignoresSafeArea())
+        .background(Color.background)
+        .navigationBarHidden(true)
     }
 }
 

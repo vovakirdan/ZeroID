@@ -12,6 +12,10 @@ extension Color {
     static let surfaceSecondary = Color.card
     static let surfaceMuted = Color.muted
     
+    // Переименованные цвета для избежания конфликтов
+    static let primaryColor = Color("AppPrimaryColor")
+    static let secondaryColor = Color("AppSecondaryColor")
+    
     // Цвета для границ
     static let borderPrimary = Color.border
     static let borderSecondary = Color.muted
