@@ -115,7 +115,7 @@ struct ChatView: View {
             }
         }) {
             Image(systemName: "arrow.up.circle.fill")
-                .font(.title2)
+                .font(.largeTitle)
                 .foregroundStyle(
                     canSendMessage ? 
                     AnyShapeStyle(Color.primaryGradient) : 
