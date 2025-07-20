@@ -149,6 +149,70 @@ struct ChatView: View {
                     .blur(radius: 10)
             )
         }
+        .background(
+            Rectangle()
+                .fill(
+                    colorScheme == .dark 
+                    ? Color.black.opacity(0.9) 
+                    : Color.white.opacity(0.9)
+                )
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+    
+    // Модальное окно с информацией о соединении
+    private var connectionInfoModal: some View {
+        VStack(spacing: 16) {
+            // Заголовок с кнопкой закрытия
+            HStack {
+                Text("Информация о соединении")
+                    .font(.headline)
+                    .foregroundColor(Color.textPrimary)
+                
+                Spacer()
+                
+                Button(action: { showConnectionInfo = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(Color.textSecondary)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top)
+            
+            // Информация о соединении
+            VStack(spacing: 12) {
+                InfoRow(title: "DataChannel", value: vm.webrtc.dataChannelState, color: vm.webrtc.isConnected ? .green : .orange)
+                InfoRow(title: "ICE Connection", value: vm.webrtc.iceConnectionState, color: .blue)
+                InfoRow(title: "ICE Gathering", value: vm.webrtc.iceGatheringState, color: .purple)
+                InfoRow(title: "Кандидаты", value: "\(vm.webrtc.candidateCount)", color: .brown)
+                InfoRow(title: "Статус", value: vm.webrtc.isConnected ? "активно" : "не готово", color: vm.webrtc.isConnected ? .green : .red)
+            }
+            .padding(.horizontal)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.surfacePrimary)
+        .cornerRadius(20, corners: [.topLeft, .topRight])
+        .shadow(radius: 10)
+    }
+    
+    // Вспомогательный компонент для строки информации
+    private func InfoRow(title: String, value: String, color: Color) -> some View {
+        HStack {
+            Text(title)
+                .font(.body)
+                .foregroundColor(Color.textSecondary)
+            
+            Spacer()
+            
+            Text(value)
+                .font(.body)
+                .foregroundColor(color)
+                .fontWeight(.medium)
+        }
+        .padding(.vertical, 4)
     }
     
     // Заголовок с кнопками Назад и Info
@@ -216,14 +280,51 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             headerView
-            if showConnectionInfo {
-                connectionStatusView
-            }
             chatArea
             inputArea
         }
         .background(chatBackground)
         .navigationBarHidden(true)
+        .overlay(
+            // Модальное окно с информацией
+            Group {
+                if showConnectionInfo {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showConnectionInfo = false
+                        }
+                    
+                    VStack {
+                        Spacer()
+                        connectionInfoModal
+                    }
+                    .transition(.move(edge: .bottom))
+                }
+            }
+        )
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: showConnectionInfo)
+    }
+}
+
+// Расширение для скругления определенных углов
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
     }
 }
 

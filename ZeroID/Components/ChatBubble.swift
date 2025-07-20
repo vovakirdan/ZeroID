@@ -11,7 +11,7 @@ struct ChatBubble: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color(red: 0.2, green: 0.6, blue: 0.9), // Синий
+                        Color(red: 0.2, green: 0.9, blue: 0.6), // Синий
                         Color(red: 0.3, green: 0.7, blue: 1.0)  // Светло-синий
                     ],
                     startPoint: .leading,
