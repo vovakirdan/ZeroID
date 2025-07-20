@@ -12,37 +12,6 @@ struct InputMethodView: View {
             Text(label)
                 .font(.caption)
                 .foregroundColor(Color.textSecondary)
-            
-            // Переключатель способов ввода
-            HStack(spacing: 8) {
-                Spacer()
-                
-                InputMethodButton(
-                    icon: "text.cursor",
-                    title: "Текст",
-                    isSelected: showingTextInput,
-                    action: { showingTextInput = true }
-                )
-                
-                InputMethodButton(
-                    icon: "qrcode.viewfinder",
-                    title: "Скан QR",
-                    isSelected: false,
-                    isEnabled: false,
-                    action: { /* TODO: Реализовать скан QR */ }
-                )
-                
-                InputMethodButton(
-                    icon: "photo",
-                    title: "Из фото",
-                    isSelected: false,
-                    isEnabled: false,
-                    action: { /* TODO: Реализовать загрузку из фото */ }
-                )
-                
-                Spacer()
-            }
-            
             if showingTextInput {
                 HStack {
                     TextField("", text: $inputText)
@@ -82,6 +51,37 @@ struct InputMethodView: View {
                 .background(Color.surfaceMuted)
                 .cornerRadius(10)
             }
+            // Переключатель способов ввода
+            HStack(spacing: 8) {
+                Spacer()
+                
+                InputMethodButton(
+                    icon: "text.cursor",
+                    title: "Текст",
+                    isSelected: showingTextInput,
+                    action: { showingTextInput = true }
+                )
+                
+                InputMethodButton(
+                    icon: "qrcode.viewfinder",
+                    title: "Скан QR",
+                    isSelected: false,
+                    isEnabled: false,
+                    action: { /* TODO: Реализовать скан QR */ }
+                )
+                
+                InputMethodButton(
+                    icon: "photo",
+                    title: "Из фото",
+                    isSelected: false,
+                    isEnabled: false,
+                    action: { /* TODO: Реализовать загрузку из фото */ }
+                )
+                
+                Spacer()
+            }
+            
+            
         }
     }
 }
@@ -117,7 +117,7 @@ struct InputMethodButton: View {
 }
 
 #Preview {
-    @Previewable @State var text = ""
+    @Previewable @State var text = "ррр"
     
     return VStack {
         InputMethodView(
