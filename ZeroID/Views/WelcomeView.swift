@@ -10,9 +10,9 @@ struct WelcomeView: View {
             Spacer()
             
             // Логотип с градиентом
-            Image(systemName: "shield.fill")
+            Image(systemName: "lock.shield")
                 .resizable()
-                .frame(width: 80, height: 80)
+                .frame(width: 80, height: 90.0)
                 .foregroundStyle(Color.primaryGradient)
                 .padding(.bottom, 8)
             
@@ -22,7 +22,7 @@ struct WelcomeView: View {
                     Text("[")
                         .font(.largeTitle.bold())
                         .foregroundColor(Color.gradientStart)
-                    Text("ZeroId")
+                    Text("ZeroID")
                         .font(.largeTitle.bold())
                         .foregroundColor(Color.textPrimary)
                     Text("]")
@@ -31,9 +31,10 @@ struct WelcomeView: View {
                 }
                 
                 Text("Супер секретный чат с end-to-end шифрованием")
-                    .font(.body)
+                    .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundColor(Color.textSecondary)
+                    
             }
             
             Spacer()
@@ -57,7 +58,7 @@ struct WelcomeView: View {
             
             VStack(spacing: 16) {
                 PrimaryButton(title: "Начать чат", arrow: true, action: onCreate)
-                SecondaryButton(title: "Настройки", action: onSettings)
+                SecondaryButton(title: "Настройки", icon: "gear", action: onSettings)
             }
             .padding(.bottom, 16)
             

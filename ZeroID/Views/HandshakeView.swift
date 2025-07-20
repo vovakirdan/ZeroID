@@ -48,11 +48,13 @@ struct HandshakeView: View {
                 HStack(spacing: 12) {
                     SecondaryButton(
                         title: "Копировать",
+                        icon: "document.on.document",
                         action: onCopy
                     )
                     
                     SecondaryButton(
                         title: "Поделиться",
+                        icon: "square.and.arrow.up",
                         action: { showShareSheet = true }
                     )
                 }
@@ -115,12 +117,6 @@ struct HandshakeView: View {
                         FutureTransferButton(
                             icon: "qrcode",
                             title: "QR-код",
-                            isEnabled: false
-                        )
-                        
-                        FutureTransferButton(
-                            icon: "wave.3.right",
-                            title: "Bluetooth",
                             isEnabled: false
                         )
                         
