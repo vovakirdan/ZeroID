@@ -16,132 +16,242 @@ enum ConnectionState: Equatable {
     case error(String)
 }
 
+enum Screen {
+    case welcome
+    case choice
+    case handshakeOffer
+    case handshakeAnswer
+    case chat
+    case settings
+    case error(String)
+}
+
 struct ContentView: View {
     @StateObject var vm = ChatViewModel()
-    @State private var mode: String? = nil
+    @State private var screen: Screen = .welcome
     @State private var remoteSDP: String = ""
+    @State private var mySDP: String = ""
+    @State private var isLoading = false
     @State private var connectionState: ConnectionState = .idle
+    @State private var showToast = false
+    @State private var toastMessage = ""
+    @State private var offerState: HandshakeOfferState = .offerGenerated("")
+    @State private var answerState: HandshakeAnswerState = .waitingOffer
 
     var body: some View {
-        VStack {
-            if connectionState == .idle {
-                Text("ZeroID P2P Demo")
-                    .font(.largeTitle).padding(.bottom)
-                HStack {
-                    Button("Создать соединение") {
-                        mode = "offer"
-                        vm.webrtc.createOffer { sdp in
-                            if let sdp = sdp {
-                                connectionState = .offerGenerated(sdp)
-                            } else {
-                                connectionState = .error("Не удалось создать оффер")
+        ZStack {
+            switch screen {
+                case .welcome:
+                    WelcomeView(
+                        onCreate: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .choice
+                            }
+                        },
+                        onSettings: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .settings
                             }
                         }
-                    }
-                    .padding()
-                    Button("Принять соединение") {
-                        mode = "answer"
-                    }
-                    .padding()
-                }
-            }
-            // Режим: Создаём оффер, ждём чтобы его скопировали
-            if case .offerGenerated(let offerSDP) = connectionState {
-                Text("Скопируй этот Offer и отправь другому клиенту:")
-                    .padding(.top)
-                VStack {
-                    TextEditor(text: .constant(offerSDP))
-                        .frame(height: 150)
-                        .border(Color.gray)
-                    Button("Копировать Offer") {
-                        UIPasteboard.general.string = offerSDP
-                    }
-                    .padding(.horizontal)
-                }
-                .padding()
-                Text("Вставь сюда Answer, полученный от peer:")
-                    .padding(.top)
-                TextEditor(text: $remoteSDP)
-                    .frame(height: 150)
-                    .border(Color.gray)
-                    .padding()
-                Button("Подтвердить Answer") {
-                    vm.webrtc.receiveAnswer(remoteSDP)
-                    connectionState = .connected
-                }
-                .padding()
-            }
-            // Режим: Вводим оффер, генерируем и копируем answer
-            if mode == "answer", connectionState == .idle {
-                Text("Вставь Offer, полученный от peer:")
-                TextEditor(text: $remoteSDP)
-                    .frame(height: 150)
-                    .border(Color.gray)
-                    .padding()
-                Button("Сгенерировать Answer") {
-                    vm.webrtc.receiveOffer(remoteSDP) { answerSDP in
-                        if let answerSDP = answerSDP {
-                            connectionState = .answerGenerated(answerSDP)
-                        } else {
-                            connectionState = .error("Не удалось принять оффер")
-                        }
-                    }
-                }
-                .padding()
-            }
-            if case .answerGenerated(let answerSDP) = connectionState {
-                Text("Скопируй этот Answer и отправь peer'у:")
-                VStack {
-                    TextEditor(text: .constant(answerSDP))
-                        .frame(height: 150)
-                        .border(Color.gray)
-                    Button("Копировать Answer") {
-                        UIPasteboard.general.string = answerSDP
-                    }
-                    .padding(.horizontal)
-                }
-                .padding()
-                Text("Ожидание соединения...")
-                    .foregroundColor(.gray)
-                    .padding()
-            }
-            if connectionState == .connected {
-                VStack {
-                    // Статус соединения для дебага
-                    VStack(spacing: 4) {
-                        Text("DataChannel: \(vm.webrtc.dataChannelState)")
-                            .font(.caption)
-                            .foregroundColor(vm.webrtc.isConnected ? .green : .orange)
-                        Text("ICE: \(vm.webrtc.iceConnectionState)")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        Text("\(vm.webrtc.iceGatheringState)")
-                            .font(.caption)
-                            .foregroundColor(.purple)
-                        Text("Кандидаты: \(vm.webrtc.candidateCount)")
-                            .font(.caption)
-                            .foregroundColor(.brown)
-                        Text("Соединение: \(vm.webrtc.isConnected ? "активно" : "не готово")")
-                            .font(.caption)
-                            .foregroundColor(vm.webrtc.isConnected ? .green : .red)
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
+                    )
                     
-                    chatView
+                case .settings:
+                    SettingsView(
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                        }
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                }
+                            }
+                    )
+                    
+                case .choice:
+                    ChoiceView(
+                        onCreateOffer: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .handshakeOffer
+                            }
+                            createOffer()
+                        },
+                        onAcceptOffer: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .handshakeAnswer
+                                answerState = .waitingOffer
+                            }
+                        },
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        }
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
+                    )
+                    
+                case .handshakeOffer:
+                    HandshakeView(
+                        step: .offer,
+                        offerState: offerState,
+                        answerState: nil,
+                        sdpText: mySDP,
+                        remoteSDP: $remoteSDP,
+                        onCopy: { 
+                            UIPasteboard.general.string = mySDP
+                            showToast(message: "SDP скопирован в буфер")
+                        },
+                        onPaste: { 
+                            if let pastedText = UIPasteboard.general.string {
+                                remoteSDP = pastedText
+                                offerState = .waitingForAnswer
+                                showToast(message: "SDP вставлен из буфера")
+                            }
+                        },
+                        onGenerateAnswer: nil,
+                        onContinue: {
+                            isLoading = true
+                            vm.webrtc.receiveAnswer(remoteSDP)
+                            connectionState = .connected
+                            isLoading = false
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .chat
+                            }
+                        },
+                        onBack: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        },
+                        isLoading: isLoading
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
+                    )
+                    
+                case .handshakeAnswer:
+                    HandshakeView(
+                        step: .answer,
+                        offerState: nil,
+                        answerState: answerState,
+                        sdpText: mySDP,
+                        remoteSDP: $remoteSDP,
+                        onCopy: { 
+                            UIPasteboard.general.string = mySDP
+                            showToast(message: "SDP скопирован в буфер")
+                        },
+                        onPaste: { 
+                            if let pastedText = UIPasteboard.general.string {
+                                remoteSDP = pastedText
+                                showToast(message: "SDP вставлен из буфера")
+                            }
+                        },
+                        onGenerateAnswer: {
+                            isLoading = true
+                            vm.webrtc.receiveOffer(remoteSDP) { answerSDP in
+                                if let answerSDP = answerSDP {
+                                    mySDP = answerSDP
+                                    answerState = .answerGenerated(answerSDP)
+                                    connectionState = .answerGenerated(answerSDP)
+                                    isLoading = false
+                                } else {
+                                    isLoading = false
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .error("Не удалось принять оффер")
+                                    }
+                                }
+                            }
+                        },
+                        onContinue: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .chat
+                            }
+                        },
+                        onBack: { 
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        },
+                        isLoading: isLoading
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
+                    )
+                    
+                case .chat:
+                    ChatView(
+                        vm: vm,
+                        connectionState: connectionState,
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        }
+                    )
+                    .gesture(
+                        DragGesture()
+                            .onEnded { gesture in
+                                if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screen = .welcome
+                                    }
+                                    resetState()
+                                }
+                            }
+                    )
+                    
+                case .error(let error):
+                    ErrorView(
+                        error: error,
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        }
+                    )
                 }
-            }
-            if case .error(let err) = connectionState {
-                Text("Ошибка: \(err)").foregroundColor(.red)
-                Button("Назад") {
-                    connectionState = .idle
-                    mode = nil
-                    remoteSDP = ""
-                }
-            }
+            
+            // Loading overlay
+            LoadingOverlay(text: "Обработка...", isLoading: isLoading)
         }
+        .toast(isVisible: $showToast, message: toastMessage)
         .onReceive(vm.webrtc.$isConnected) { connected in
             print("[ContentView] isConnected changed to:", connected)
             if connected && connectionState != .connected {
@@ -149,45 +259,43 @@ struct ContentView: View {
                 connectionState = .connected
             }
         }
-        .padding()
     }
-
-    var chatView: some View {
-        VStack {
-            if !vm.webrtc.isConnected {
-                Text("⚠️ Ожидание установки соединения...")
-                    .foregroundColor(.orange)
-                    .padding()
+    
+    // MARK: - Private Methods
+    
+    private func createOffer() {
+        vm.webrtc.createOffer { sdp in
+            if let sdp = sdp {
+                mySDP = sdp
+                offerState = .offerGenerated(sdp)
+                connectionState = .offerGenerated(sdp)
+            } else {
+                screen = .error("Не удалось создать оффер")
             }
-            
-            List(vm.messages) { msg in
-                HStack {
-                    if msg.isMine { Spacer() }
-                    Text(msg.text)
-                        .padding(8)
-                        .background(msg.isMine ? Color.blue : Color.gray.opacity(0.3))
-                        .foregroundColor(msg.isMine ? .white : .black)
-                        .cornerRadius(8)
-                    if !msg.isMine { Spacer() }
-                }
+        }
+    }
+    
+    private func resetState() {
+        remoteSDP = ""
+        mySDP = ""
+        isLoading = false
+        connectionState = .idle
+        offerState = .offerGenerated("")
+        answerState = .waitingOffer
+    }
+    
+    private func showToast(message: String) {
+        toastMessage = message
+        showToast = true
+        
+        // Автоматически скрыть toast через 2 секунды
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showToast = false
             }
-            HStack {
-                TextField("Сообщение", text: $vm.inputText)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                Button("Отправить") { 
-                    if vm.webrtc.isConnected {
-                        vm.sendMessage() 
-                    } else {
-                        print("[ContentView] Cannot send message - not connected")
-                    }
-                }
-                .disabled(!vm.webrtc.isConnected)
-            }
-            .padding()
         }
     }
 }
-
 
 #Preview {
     ContentView()
