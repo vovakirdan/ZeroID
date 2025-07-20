@@ -15,14 +15,14 @@ struct ChatBubble: View {
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(isMine ? Color.accentColor : Color(.systemGray5))
+                            .fill(isMine ? Color.accentColor : Color.secondary)
                     )
-                    .foregroundColor(isMine ? .white : .primary)
-                    .shadow(color: .black.opacity(0.06), radius: 1, x: 0, y: 1)
+                    .foregroundColor(isMine ? Color.primary : Color.textPrimary)
+                    .shadow(color: Color.foreground.opacity(0.06), radius: 1, x: 0, y: 1)
                 
                 Text(timestamp, style: .time)
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color.textSecondary)
                     .padding(.horizontal, 4)
             }
             

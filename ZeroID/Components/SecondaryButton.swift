@@ -10,7 +10,7 @@ struct SecondaryButton: View {
                 .fontWeight(.regular)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color(.systemGray5))
+                .background(Color.secondary)
                 .foregroundColor(.accentColor)
                 .cornerRadius(14)
         }

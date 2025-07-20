@@ -18,12 +18,12 @@ struct WelcomeView: View {
             
             Text("ZeroID")
                 .font(.largeTitle.bold())
-                .foregroundColor(.primary)
+                .foregroundColor(Color.textPrimary)
             
             Text("P2P чат без серверов\nБыстро. Безопасно. Приватно.")
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
             
             Spacer()
             
@@ -41,7 +41,7 @@ struct WelcomeView: View {
                     Text("Настройки")
                         .font(.body)
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
             }
             .padding(.bottom, 32)
         }

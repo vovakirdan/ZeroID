@@ -19,7 +19,7 @@ struct ErrorView: View {
             Text(error)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
             
             PrimaryButton(title: "Назад", action: onBack)
             

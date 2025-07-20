@@ -34,11 +34,12 @@ struct ContentView: View {
     @State private var connectionState: ConnectionState = .idle
     @State private var showToast = false
     @State private var toastMessage = ""
+    @State private var offerState: HandshakeOfferState = .offerGenerated("")
+    @State private var answerState: HandshakeAnswerState = .waitingOffer
 
     var body: some View {
         ZStack {
-            Group {
-                switch screen {
+            switch screen {
                 case .welcome:
                     WelcomeView(
                         onCreate: { 
@@ -50,6 +51,7 @@ struct ContentView: View {
                         onJoin: { 
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .handshakeAnswer
+                                answerState = .waitingOffer
                             }
                         },
                         onSettings: {
@@ -71,6 +73,8 @@ struct ContentView: View {
                 case .handshakeOffer:
                     HandshakeView(
                         step: .offer,
+                        offerState: offerState,
+                        answerState: nil,
                         sdpText: mySDP,
                         remoteSDP: $remoteSDP,
                         onCopy: { 
@@ -80,9 +84,11 @@ struct ContentView: View {
                         onPaste: { 
                             if let pastedText = UIPasteboard.general.string {
                                 remoteSDP = pastedText
+                                offerState = .waitingForAnswer
                                 showToast(message: "SDP вставлен из буфера")
                             }
                         },
+                        onGenerateAnswer: nil,
                         onContinue: {
                             isLoading = true
                             vm.webrtc.receiveAnswer(remoteSDP)
@@ -104,6 +110,8 @@ struct ContentView: View {
                 case .handshakeAnswer:
                     HandshakeView(
                         step: .answer,
+                        offerState: nil,
+                        answerState: answerState,
                         sdpText: mySDP,
                         remoteSDP: $remoteSDP,
                         onCopy: { 
@@ -116,22 +124,25 @@ struct ContentView: View {
                                 showToast(message: "SDP вставлен из буфера")
                             }
                         },
-                        onContinue: {
+                        onGenerateAnswer: {
                             isLoading = true
                             vm.webrtc.receiveOffer(remoteSDP) { answerSDP in
                                 if let answerSDP = answerSDP {
                                     mySDP = answerSDP
+                                    answerState = .answerGenerated(answerSDP)
                                     connectionState = .answerGenerated(answerSDP)
                                     isLoading = false
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        screen = .chat
-                                    }
                                 } else {
                                     isLoading = false
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .error("Не удалось принять оффер")
                                     }
                                 }
+                            }
+                        },
+                        onContinue: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .chat
                             }
                         },
                         onBack: { 
@@ -166,7 +177,6 @@ struct ContentView: View {
                         }
                     )
                 }
-            }
             
             // Loading overlay
             LoadingOverlay(text: "Обработка...", isLoading: isLoading)
@@ -187,6 +197,7 @@ struct ContentView: View {
         vm.webrtc.createOffer { sdp in
             if let sdp = sdp {
                 mySDP = sdp
+                offerState = .offerGenerated(sdp)
                 connectionState = .offerGenerated(sdp)
             } else {
                 screen = .error("Не удалось создать оффер")
@@ -199,6 +210,8 @@ struct ContentView: View {
         mySDP = ""
         isLoading = false
         connectionState = .idle
+        offerState = .offerGenerated("")
+        answerState = .waitingOffer
     }
     
     private func showToast(message: String) {

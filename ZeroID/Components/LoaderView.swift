@@ -11,14 +11,14 @@ struct LoaderView: View {
             
             Text(text)
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(Color.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(24)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                .fill(Color.surfaceSecondary)
+                .shadow(color: Color.foreground.opacity(0.1), radius: 8, x: 0, y: 4)
         )
     }
 }
@@ -30,7 +30,7 @@ struct LoadingOverlay: View {
     var body: some View {
         if isLoading {
             ZStack {
-                Color.black.opacity(0.3)
+                Color.foreground.opacity(0.3)
                     .ignoresSafeArea()
                     .onTapGesture { } // Блокируем взаимодействие
                 

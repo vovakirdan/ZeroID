@@ -20,7 +20,7 @@ struct CopyField: View {
                     .frame(height: 110)
                     .cornerRadius(10)
                     .disabled(true)
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(.systemGray5), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.borderPrimary, lineWidth: 1))
                 Button(action: {
                     UIPasteboard.general.string = value
                     copied = true

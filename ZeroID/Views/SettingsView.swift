@@ -13,7 +13,7 @@ struct SettingsView: View {
                         Text("Тема")
                         Spacer()
                         Text("Системная")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                     
                     HStack {
@@ -22,7 +22,7 @@ struct SettingsView: View {
                         Text("Язык")
                         Spacer()
                         Text("Русский")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
                 
@@ -33,7 +33,7 @@ struct SettingsView: View {
                         Text("STUN сервер")
                         Spacer()
                         Text("stun:stun.l.google.com:19302")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                             .font(.caption)
                     }
                     
@@ -43,7 +43,7 @@ struct SettingsView: View {
                         Text("TURN сервер")
                         Spacer()
                         Text("Не настроен")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
                 
@@ -54,7 +54,7 @@ struct SettingsView: View {
                         Text("Версия")
                         Spacer()
                         Text("1.0.0")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                     
                     HStack {
@@ -63,7 +63,7 @@ struct SettingsView: View {
                         Text("Лицензия")
                         Spacer()
                         Text("MIT")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Color.textSecondary)
                     }
                 }
             }

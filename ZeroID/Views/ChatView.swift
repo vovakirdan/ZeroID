@@ -14,7 +14,7 @@ struct ChatView: View {
                         .font(.title2)
                         .foregroundColor(.accentColor)
                         .padding(8)
-                        .background(Color(.systemGray6))
+                        .background(Color.surfaceMuted)
                         .clipShape(Circle())
                 }
                 Spacer()
@@ -44,7 +44,7 @@ struct ChatView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(Color.gray.opacity(0.1))
+            .background(Color.surfaceMuted)
             .cornerRadius(8)
             .padding(.horizontal)
             

@@ -12,14 +12,14 @@ struct ToastView: View {
                 
                 Text(message)
                     .font(.body)
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.textPrimary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.surfaceSecondary)
+                    .shadow(color: Color.foreground.opacity(0.1), radius: 4, x: 0, y: 2)
             )
             .transition(.move(edge: .top).combined(with: .opacity))
         }
@@ -50,7 +50,8 @@ extension View {
     }
 }
 
-#Preview {
+struct ToastView_Previews: PreviewProvider {
+    static var previews: some View {
     ZStack {
         Color.background.ignoresSafeArea()
         
@@ -60,4 +61,5 @@ extension View {
         }
     }
     .toast(isVisible: .constant(true), message: "Скопировано в буфер обмена")
+    }
 } 

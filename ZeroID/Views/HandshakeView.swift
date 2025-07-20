@@ -2,13 +2,18 @@ import SwiftUI
 
 struct HandshakeView: View {
     let step: HandshakeStep
+    let offerState: HandshakeOfferState?
+    let answerState: HandshakeAnswerState?
     let sdpText: String
     @Binding var remoteSDP: String
     let onCopy: () -> Void
     let onPaste: () -> Void
+    let onGenerateAnswer: (() -> Void)?
     let onContinue: () -> Void
     let onBack: () -> Void
     let isLoading: Bool
+    
+    @State private var showShareSheet = false
 
     var body: some View {
         VStack {
@@ -18,7 +23,7 @@ struct HandshakeView: View {
                         .font(.title2)
                         .foregroundColor(.accentColor)
                         .padding(8)
-                        .background(Color(.systemGray6))
+                        .background(Color.surfaceMuted)
                         .clipShape(Circle())
                 }
                 Spacer()
@@ -27,59 +32,231 @@ struct HandshakeView: View {
             
             StepHeader(
                 title: step == .offer ? "Обмен оффером" : "Обмен ответом",
-                subtitle: step == .offer
-                    ? "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
-                    : "Вставь Offer от peer-а, сгенерируй Answer и отправь обратно.",
+                subtitle: getStepSubtitle(),
                 icon: step == .offer ? "arrowshape.turn.up.right.circle.fill" : "arrowshape.turn.up.left.circle.fill"
             )
 
-            CopyField(
-                label: step == .offer ? "Твой Offer" : "Твой Answer",
-                value: sdpText,
-                onCopy: onCopy
-            )
-            .padding(.bottom, 14)
-            
-            VStack(alignment: .leading, spacing: 10) {
-                Text(step == .offer ? "Вставь Answer от peer-а:" : "Вставь Offer от peer-а:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            // Показываем поле для копирования только когда есть что копировать
+            if shouldShowCopyField() {
+                CopyField(
+                    label: step == .offer ? "Твой Offer" : "Твой Answer",
+                    value: sdpText,
+                    onCopy: onCopy
+                )
+                .padding(.bottom, 14)
                 
-                HStack {
-                    TextEditor(text: $remoteSDP)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(height: 100)
-                        .cornerRadius(10)
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(.systemGray5), lineWidth: 1))
-                    Button(action: {
-                        if let clipboard = UIPasteboard.general.string {
-                            remoteSDP = clipboard
-                            onPaste()
-                        }
-                    }) {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.title3)
-                            .foregroundColor(.accentColor)
-                    }
-                    .padding(.trailing, 4)
+                // Кнопки действий для скопированного SDP
+                HStack(spacing: 12) {
+                    SecondaryButton(
+                        title: "Копировать",
+                        action: onCopy
+                    )
+                    
+                    SecondaryButton(
+                        title: "Поделиться",
+                        action: { showShareSheet = true }
+                    )
                 }
+                .padding(.bottom, 14)
             }
-            .padding(.bottom, 14)
+            
+            // Показываем поле для вставки только когда нужно
+            if shouldShowPasteField() {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(getPasteFieldLabel())
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        TextEditor(text: $remoteSDP)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(height: 100)
+                            .cornerRadius(10)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(.systemGray5), lineWidth: 1))
+                        Button(action: {
+                            if let clipboard = UIPasteboard.general.string {
+                                remoteSDP = clipboard
+                                onPaste()
+                            }
+                        }) {
+                            Image(systemName: "doc.on.clipboard")
+                                .font(.title3)
+                                .foregroundColor(.accentColor)
+                        }
+                        .padding(.trailing, 4)
+                    }
+                }
+                .padding(.bottom, 14)
+            }
             
             if isLoading {
                 LoaderView(text: "Подключение...")
                     .background(Color.black.opacity(0.05).ignoresSafeArea())
             }
             
-            PrimaryButton(title: step == .offer ? "Подтвердить Answer" : "Сгенерировать Answer", action: onContinue)
-                .disabled(isLoading || remoteSDP.isEmpty)
+            // Кнопки действий в зависимости от состояния
+            if let buttonConfig = getButtonConfig() {
+                PrimaryButton(
+                    title: buttonConfig.title,
+                    action: buttonConfig.action
+                )
+                .disabled(buttonConfig.isDisabled)
                 .padding(.top, 8)
+            }
+            
+            // Раздел с будущими способами передачи
+            if shouldShowCopyField() {
+                VStack(spacing: 12) {
+                    Text("Скоро будут поддерживаться:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 16) {
+                        FutureTransferButton(
+                            icon: "qrcode",
+                            title: "QR-код",
+                            isEnabled: false
+                        )
+                        
+                        FutureTransferButton(
+                            icon: "wave.3.right",
+                            title: "Bluetooth",
+                            isEnabled: false
+                        )
+                        
+                        FutureTransferButton(
+                            icon: "airplayaudio",
+                            title: "Airdrop",
+                            isEnabled: false
+                        )
+                    }
+                }
+                .padding(.top, 20)
+            }
 
             Spacer()
         }
         .padding(.horizontal)
         .animation(.easeInOut, value: isLoading)
         .background(Color.background.ignoresSafeArea())
+        .sheet(isPresented: $showShareSheet) {
+            ActivityView(activityItems: [sdpText])
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func getStepSubtitle() -> String {
+        switch step {
+        case .offer:
+            if let offerState = offerState {
+                switch offerState {
+                case .offerGenerated:
+                    return "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
+                case .waitingForAnswer:
+                    return "Answer вставлен. Нажми 'Подтвердить' для перехода в чат."
+                }
+            }
+            return "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
+            
+        case .answer:
+            if let answerState = answerState {
+                switch answerState {
+                case .waitingOffer:
+                    return "Вставь Offer от peer-а и сгенерируй Answer."
+                case .answerGenerated:
+                    return "Answer сгенерирован. Скопируй и отправь peer-у.\nЗатем нажми 'Перейти к чату'."
+                }
+            }
+            return "Вставь Offer от peer-а и сгенерируй Answer."
+        }
+    }
+    
+    private func shouldShowCopyField() -> Bool {
+        switch step {
+        case .offer:
+            if let offerState = offerState {
+                switch offerState {
+                case .offerGenerated:
+                    return true
+                case .waitingForAnswer:
+                    return false
+                }
+            }
+            return false
+            
+        case .answer:
+            if let answerState = answerState {
+                switch answerState {
+                case .waitingOffer:
+                    return false
+                case .answerGenerated:
+                    return true
+                }
+            }
+            return false
+        }
+    }
+    
+    private func shouldShowPasteField() -> Bool {
+        switch step {
+        case .offer:
+            if let offerState = offerState {
+                switch offerState {
+                case .offerGenerated:
+                    return true
+                case .waitingForAnswer:
+                    return true
+                }
+            }
+            return true
+            
+        case .answer:
+            if let answerState = answerState {
+                switch answerState {
+                case .waitingOffer:
+                    return true
+                case .answerGenerated:
+                    return false
+                }
+            }
+            return true
+        }
+    }
+    
+    private func getPasteFieldLabel() -> String {
+        switch step {
+        case .offer:
+            return "Вставь Answer от peer-а:"
+        case .answer:
+            return "Вставь Offer от peer-а:"
+        }
+    }
+    
+    private func getButtonConfig() -> (title: String, action: () -> Void, isDisabled: Bool)? {
+        switch step {
+        case .offer:
+            if let offerState = offerState {
+                switch offerState {
+                case .offerGenerated:
+                    return nil // Нет кнопки, только копирование
+                case .waitingForAnswer:
+                    return ("Подтвердить Answer", onContinue, isLoading)
+                }
+            }
+            return nil
+            
+        case .answer:
+            if let answerState = answerState {
+                switch answerState {
+                case .waitingOffer:
+                    return ("Сгенерировать Answer", onGenerateAnswer ?? {}, isLoading || remoteSDP.isEmpty)
+                case .answerGenerated:
+                    return ("Перейти к чату", onContinue, isLoading)
+                }
+            }
+            return ("Сгенерировать Answer", onGenerateAnswer ?? {}, isLoading || remoteSDP.isEmpty)
+        }
     }
 }
 
@@ -91,10 +268,13 @@ enum HandshakeStep {
 #Preview {
     HandshakeView(
         step: .offer,
+        offerState: .offerGenerated("test"),
+        answerState: nil,
         sdpText: "sdpText",
         remoteSDP: .constant("remoteSDP"),
         onCopy: {},
         onPaste: {},
+        onGenerateAnswer: nil,
         onContinue: {},
         onBack: {},
         isLoading: false
