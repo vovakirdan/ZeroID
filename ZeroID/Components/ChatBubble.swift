@@ -5,6 +5,27 @@ struct ChatBubble: View {
     let isMine: Bool
     let timestamp: Date
     
+    // Цвет фона для моих сообщений с улучшенной читаемостью
+    private var myMessageBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.2, green: 0.6, blue: 0.9), // Синий
+                        Color(red: 0.3, green: 0.7, blue: 1.0)  // Светло-синий
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+    }
+    
+    // Цвет фона для чужих сообщений
+    private var otherMessageBackground: some View {
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color(red: 0.15, green: 0.15, blue: 0.15, opacity: 0.85))
+    }
+    
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             if isMine { 
@@ -22,31 +43,9 @@ struct ChatBubble: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                         .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(isMine ? 
-                                    AnyShapeStyle(Color.primaryGradient) : 
-                                    AnyShapeStyle(Color(red: 0.15, green: 0.15, blue: 0.15, opacity: 0.85))
-                                )
+                            isMine ? AnyView(myMessageBackground) : AnyView(otherMessageBackground)
                         )
-                        .foregroundColor(isMine ? .white : Color(red: 0.9, green: 0.9, blue: 0.9))
-                        .overlay(alignment: isMine ? .bottomTrailing : .bottomLeading) {
-                            // Apple-style хвостик пузырька
-                            if isMine {
-                                // Хвостик справа для моих сообщений
-                                Image(systemName: "arrowtriangle.down.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(Color.primaryGradient)
-                                    .rotationEffect(.degrees(45))
-                                    .offset(x: 8, y: 8)
-                            } else {
-                                // Хвостик слева для чужих сообщений
-                                Image(systemName: "arrowtriangle.down.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(Color(red: 0.15, green: 0.15, blue: 0.15, opacity: 0.85))
-                                    .rotationEffect(.degrees(-45))
-                                    .offset(x: -8, y: 8)
-                            }
-                        }
+                        .foregroundColor(.white)
                     
                     if !isMine {
                         Spacer()

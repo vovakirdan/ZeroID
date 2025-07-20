@@ -4,24 +4,35 @@ struct ChatView: View {
     @ObservedObject var vm: ChatViewModel
     let connectionState: ConnectionState
     let onBack: () -> Void
+    @Environment(\.colorScheme) var colorScheme
     
-    // Градиентные цвета для фона чата
-    private var chatGradientColors: [Color] {
-        [
-            Color(red: 0.0, green: 0.15, blue: 0.2, opacity: 1.0),
-            Color(red: 0.0, green: 0.1, blue: 0.15, opacity: 1.0),
-            Color(red: 0.02, green: 0.08, blue: 0.12, opacity: 1.0)
-        ]
-    }
-    
-    // Градиентный фон чата
+    // Адаптивный градиентный фон чата
     private var chatBackground: some View {
-        LinearGradient(
-            gradient: Gradient(colors: chatGradientColors),
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea(.all)
+        if colorScheme == .dark {
+            // Темная тема - градиент темно-синих оттенков
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 0.0, green: 0.05, blue: 0.1),
+                    Color(red: 0.05, green: 0.1, blue: 0.15),
+                    Color(red: 0.02, green: 0.08, blue: 0.12)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea(.all)
+        } else {
+            // Светлая тема - светлый градиент
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 0.95, green: 0.97, blue: 1.0),
+                    Color(red: 0.92, green: 0.95, blue: 0.98),
+                    Color(red: 0.90, green: 0.93, blue: 0.96)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea(.all)
+        }
     }
     
     // Состояние ожидания соединения
@@ -79,22 +90,41 @@ struct ChatView: View {
         vm.webrtc.isConnected && !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
+    // Цвет фона инпут поля в зависимости от темы
+    private var inputFieldBackground: Color {
+        if colorScheme == .dark {
+            return Color(red: 0.12, green: 0.12, blue: 0.12, opacity: 0.7)
+        } else {
+            return Color(red: 0.95, green: 0.95, blue: 0.95, opacity: 0.8)
+        }
+    }
+    
+    // Цвет рамки инпут поля
+    private var inputFieldBorder: Color {
+        if vm.inputText.isEmpty {
+            return colorScheme == .dark ? Color.gray.opacity(0.3) : Color.gray.opacity(0.5)
+        } else {
+            return Color.accentColor
+        }
+    }
+    
     // Текстовое поле ввода
     private var textInputField: some View {
         HStack {
             TextField("Введите сообщение...", text: $vm.inputText, axis: .vertical)
                 .font(.body)
+                .foregroundColor(colorScheme == .dark ? .white : .black)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .lineLimit(1...5)
         }
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(red: 0.12, green: 0.12, blue: 0.12, opacity: 0.7))
+                .fill(inputFieldBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(vm.inputText.isEmpty ? Color.gray.opacity(0.3) : Color.accentColor, lineWidth: 1)
+                .stroke(inputFieldBorder, lineWidth: 1)
         )
     }
     
@@ -120,7 +150,7 @@ struct ChatView: View {
         .animation(.spring(response: 0.3), value: vm.inputText)
     }
     
-    // Область ввода сообщений
+    // Область ввода сообщений с адаптивным фоном
     private var inputArea: some View {
         VStack(spacing: 0) {
             Divider()
@@ -134,8 +164,12 @@ struct ChatView: View {
             .padding(.vertical, 12)
             .background(
                 Rectangle()
-                    .fill(Color.black.opacity(0.8))
-                    .blur(radius: 20)
+                    .fill(
+                        colorScheme == .dark 
+                        ? Color.black.opacity(0.8) 
+                        : Color.white.opacity(0.9)
+                    )
+                    .blur(radius: 10)
             )
         }
     }
@@ -182,8 +216,14 @@ struct ChatView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color.surfaceMuted)
-        .cornerRadius(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    colorScheme == .dark 
+                    ? Color.surfaceMuted 
+                    : Color.gray.opacity(0.1)
+                )
+        )
         .padding(.horizontal)
     }
     
@@ -200,8 +240,35 @@ struct ChatView: View {
 }
 
 #Preview {
-    ChatView(
-        vm: ChatViewModel(),
+    let mockVM = ChatViewModel()
+    
+    // Создаем разнообразные сообщения для полного тестирования интерфейса
+    let now = Date()
+    mockVM.messages = [
+        // Сообщения собеседника
+        Message(text: "Привет! 👋 Как дела?", isMine: false, date: now.addingTimeInterval(-600)),
+        Message(text: "Ты уже протестировал новый интерфейс чата?", isMine: false, date: now.addingTimeInterval(-500)),
+        Message(text: "Это очень длинное сообщение для проверки корректного переноса текста на несколько строк в пузырьке чата. Должно выглядеть красиво и читаемо.", isMine: false, date: now.addingTimeInterval(-400)),
+        
+        // Мои сообщения
+        Message(text: "Привет! Все отлично, спасибо! 😊", isMine: true, date: now.addingTimeInterval(-350)),
+        Message(text: "Да, интерфейс получился классный!", isMine: true, date: now.addingTimeInterval(-300)),
+        Message(text: "Короткое", isMine: true, date: now.addingTimeInterval(-250)),
+        
+        // Еще сообщения собеседника
+        Message(text: "Отлично! 🎉", isMine: false, date: now.addingTimeInterval(-200)),
+        Message(text: "Когда планируешь релиз?", isMine: false, date: now.addingTimeInterval(-150)),
+        
+        // Еще мои сообщения
+        Message(text: "На следующей неделе, если все пройдет тестирование", isMine: true, date: now.addingTimeInterval(-100)),
+        Message(text: "🤞", isMine: true, date: now.addingTimeInterval(-50))
+    ]
+    
+    // Устанавливаем состояние соединения для отображения чата
+    mockVM.webrtc.isConnected = true
+
+    return ChatView(
+        vm: mockVM,
         connectionState: .connected,
         onBack: {}
     )
