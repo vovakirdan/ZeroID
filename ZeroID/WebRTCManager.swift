@@ -22,7 +22,7 @@ class WebRTCManager: NSObject, ObservableObject {
         RTCIceServer(urlStrings: ["stun:stun2.l.google.com:19302"]),
         RTCIceServer(urlStrings: ["stun:stun3.l.google.com:19302"]),
         RTCIceServer(urlStrings: ["stun:stun4.l.google.com:19302"]),
-        RTCIceServer(urlStrings: ["turn:relay1.expressturn.com:3480"],  // это временные, их можно на публику
+        RTCIceServer(urlStrings: ["turn:relay1.expressturn.com:3480"],
                      username: "000000002067703673",
                      credential: "aUS5WkBI4dk568G6L/uv7ZQvBAQ=")
     ]
@@ -36,6 +36,13 @@ class WebRTCManager: NSObject, ObservableObject {
 
     override init() {
         print("[WebRTCManager] Init")
+        
+        // Запускаем тесты сериализации при инициализации
+        #if DEBUG
+        SdpSerializerTests.testSerializationPipeline()
+        SdpSerializerTests.testCompressionRatio()
+        #endif
+        
         RTCInitializeSSL()
         self.factory = RTCPeerConnectionFactory()
         super.init()
@@ -46,7 +53,7 @@ class WebRTCManager: NSObject, ObservableObject {
         print("[WebRTC] Creating peerConnection")
         let config = RTCConfiguration()
         config.iceServers = iceServers
-        config.continualGatheringPolicy = .gatherContinually  // Непрерывный сбор кандидатов
+        config.continualGatheringPolicy = .gatherContinually
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         guard let pc = factory.peerConnection(with: config, constraints: constraints, delegate: self) else {
             let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
@@ -61,7 +68,6 @@ class WebRTCManager: NSObject, ObservableObject {
 
     // Создать оффер (инициатор)
     func createOffer(completion: @escaping (String?) -> Void) {
-        // Добавляем время к каждому print
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: creating offer")
         
@@ -126,7 +132,7 @@ class WebRTCManager: NSObject, ObservableObject {
     // Принять remote offer, создать answer
     func receiveOffer(_ offerSDP: String, completion: @escaping (String?) -> Void) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Receiver: received offer, setting remote desc")
+        print("[\(timeString)] [WebRTC] Receiver: received offer, deserializing...")
         
         // Инициализируем состояние сбора кандидатов
         self.gatherStartTime = Date()
@@ -149,109 +155,129 @@ class WebRTCManager: NSObject, ObservableObject {
             self.checkIfReadyToReturnSDP(pc)
         }
         
-        // Валидация SDP - только базовый trim по краям
-        let cleanedSDP = offerSDP // .trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[\(timeString)] [WebRTC] Offer SDP length:", cleanedSDP.count)
-        
-        if cleanedSDP.isEmpty {
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ERROR: Offer SDP is empty")
-            completion(nil)
-            return
-        }
-        
-        // Проверяем, что SDP начинается с правильного формата
-        if !cleanedSDP.hasPrefix("v=0") {
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ERROR: Offer SDP has invalid format (should start with 'v=0')")
-            print("[\(timeString2)] [WebRTC] SDP starts with:", String(cleanedSDP.prefix(10)))
-            completion(nil)
-            return
-        }
-        
-        // Детальное логирование SDP для диагностики
-        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString2)] [WebRTC] Offer SDP content (first 100 chars):", String(cleanedSDP.prefix(100)))
-        
-        self.peerConnection = createPeerConnection()
-        let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-        let sdp = RTCSessionDescription(type: .offer, sdp: cleanedSDP)
-        peerConnection?.setRemoteDescription(sdp, completionHandler: { [weak self] error in
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            if let error = error {
-                print("[\(timeString2)] [WebRTC] ERROR setting remote description:", error)
+        // Десериализуем SDP через base64 → gzip → JSON
+        do {
+            let payload = try SdpSerializer.deserializeSdp(offerSDP)
+            print("[\(timeString)] [WebRTC] Deserialized offer payload - id:", payload.id, "ts:", payload.ts)
+            print("[\(timeString)] [WebRTC] Offer SDP length:", payload.sdp.count)
+            
+            if payload.sdp.isEmpty {
+                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString2)] [WebRTC] ERROR: Deserialized SDP is empty")
                 completion(nil)
                 return
             }
-            print("[\(timeString2)] [WebRTC] Remote description set successfully")
-            self?.peerConnection?.answer(for: constraints, completionHandler: { answerSdp, err in
+            
+            // Проверяем, что SDP начинается с правильного формата
+            if !payload.sdp.hasPrefix("v=0") {
+                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString2)] [WebRTC] ERROR: Deserialized SDP has invalid format (should start with 'v=0')")
+                print("[\(timeString2)] [WebRTC] SDP starts with:", String(payload.sdp.prefix(10)))
+                completion(nil)
+                return
+            }
+            
+            // Детальное логирование SDP для диагностики
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] Offer SDP content (first 100 chars):", String(payload.sdp.prefix(100)))
+            
+            self.peerConnection = createPeerConnection()
+            let sdp = RTCSessionDescription(type: .offer, sdp: payload.sdp)
+            
+            peerConnection?.setRemoteDescription(sdp, completionHandler: { [weak self] error in
                 let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-                if let err = err {
-                    print("[\(timeString3)] [WebRTC] ERROR creating answer:", err)
+                if let error = error {
+                    print("[\(timeString3)] [WebRTC] ERROR setting remote description:", error)
                     completion(nil)
                     return
                 }
-                guard let answerSdp = answerSdp else { 
-                    print("[\(timeString3)] [WebRTC] ERROR: Answer SDP is nil")
-                    completion(nil)
-                    return 
-                }
-                print("[\(timeString3)] [WebRTC] Answer created successfully")
-                self?.peerConnection?.setLocalDescription(answerSdp, completionHandler: { err2 in
+                print("[\(timeString3)] [WebRTC] Remote description set successfully")
+                
+                // Создаем answer
+                let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+                self?.peerConnection?.answer(for: constraints) { answerSdp, error in
                     let timeString4 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-                    if let err2 = err2 {
-                        print("[\(timeString4)] [WebRTC] ERROR setting local answer description:", err2)
-                    } else {
-                        print("[\(timeString4)] [WebRTC] Local answer description set successfully")
+                    if let error = error {
+                        print("[\(timeString4)] [WebRTC] ERROR creating answer:", error)
+                        completion(nil)
+                        return
                     }
-                    // НЕ вызываем completion здесь - ждем завершения ICE gathering
-                })
+                    guard let answerSdp = answerSdp else {
+                        print("[\(timeString4)] [WebRTC] ERROR: Answer SDP is nil")
+                        completion(nil)
+                        return
+                    }
+                    print("[\(timeString4)] [WebRTC] Answer created successfully")
+                    
+                    self?.peerConnection?.setLocalDescription(answerSdp, completionHandler: { err2 in
+                        let timeString5 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                        if let err2 = err2 {
+                            print("[\(timeString5)] [WebRTC] ERROR setting local answer description:", err2)
+                        } else {
+                            print("[\(timeString5)] [WebRTC] Local answer description set successfully")
+                        }
+                        // НЕ вызываем completion здесь - ждем завершения ICE gathering
+                    })
+                }
             })
-        })
+        } catch {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ERROR deserializing offer:", error)
+            completion(nil)
+            return
+        }
     }
 
     // Принять answer на стороне инициатора
     func receiveAnswer(_ answerSDP: String) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Initiator: received answer, setting remote desc")
+        print("[\(timeString)] [WebRTC] Initiator: received answer, deserializing...")
         
-        // Валидация SDP - только базовый trim по краям
-        let cleanedSDP = answerSDP // .trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[\(timeString)] [WebRTC] Answer SDP length:", cleanedSDP.count)
-        
-        if cleanedSDP.isEmpty {
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ERROR: Answer SDP is empty")
-            return
-        }
-        
-        // Проверяем, что SDP начинается с правильного формата
-        if !cleanedSDP.hasPrefix("v=0") {
-            let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString3)] [WebRTC] ERROR: Answer SDP has invalid format (should start with 'v=0')")
-            print("[\(timeString3)] [WebRTC] SDP starts with:", String(cleanedSDP.prefix(10)))
-            return
-        }
-        
-        // Детальное логирование SDP для диагностики
-        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString2)] [WebRTC] Answer SDP content (first 100 chars):", String(cleanedSDP.prefix(100)))
-        
-        guard let pc = self.peerConnection else { 
-            let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString3)] [WebRTC] ERROR: No peer connection for answer")
-            return 
-        }
-        
-        let sdp = RTCSessionDescription(type: .answer, sdp: cleanedSDP)
-        pc.setRemoteDescription(sdp, completionHandler: { err in
-            let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            if let err = err {
-                print("[\(timeString3)] [WebRTC] ERROR setting remote answer description:", err)
-            } else {
-                print("[\(timeString3)] [WebRTC] Remote answer description set successfully")
+        // Десериализуем SDP через base64 → gzip → JSON
+        do {
+            let payload = try SdpSerializer.deserializeSdp(answerSDP)
+            print("[\(timeString)] [WebRTC] Deserialized answer payload - id:", payload.id, "ts:", payload.ts)
+            print("[\(timeString)] [WebRTC] Answer SDP length:", payload.sdp.count)
+            
+            if payload.sdp.isEmpty {
+                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString2)] [WebRTC] ERROR: Deserialized SDP is empty")
+                return
             }
-        })
+            
+            // Проверяем, что SDP начинается с правильного формата
+            if !payload.sdp.hasPrefix("v=0") {
+                let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString3)] [WebRTC] ERROR: Deserialized SDP has invalid format (should start with 'v=0')")
+                print("[\(timeString3)] [WebRTC] SDP starts with:", String(payload.sdp.prefix(10)))
+                return
+            }
+            
+            // Детальное логирование SDP для диагностики
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] Answer SDP content (first 100 chars):", String(payload.sdp.prefix(100)))
+            
+            guard let pc = self.peerConnection else { 
+                let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString3)] [WebRTC] ERROR: No peer connection for answer")
+                return 
+            }
+            
+            let sdp = RTCSessionDescription(type: .answer, sdp: payload.sdp)
+            
+            pc.setRemoteDescription(sdp, completionHandler: { err in
+                let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                if let err = err {
+                    print("[\(timeString3)] [WebRTC] ERROR setting remote answer description:", err)
+                } else {
+                    print("[\(timeString3)] [WebRTC] Remote answer description set successfully")
+                }
+            })
+        } catch {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ERROR deserializing answer:", error)
+            return
+        }
     }
 
     // Отправка сообщения через dataChannel
@@ -288,24 +314,52 @@ class WebRTCManager: NSObject, ObservableObject {
             // Для offer
             if let offerCompletion, peerConnection.localDescription?.type == .offer {
                 let sdp = peerConnection.localDescription?.sdp
-                print("[\(timeString)] [WebRTC] Returning offer SDP with length:", sdp?.count ?? 0)
-                offerCompletion(sdp)
+                if let sdp = sdp {
+                    // Сериализуем SDP через JSON → gzip → base64
+                    do {
+                        let payload = SdpPayload(sdp: sdp)
+                        let serialized = try SdpSerializer.serializeSdp(payload)
+                        print("[\(timeString)] [WebRTC] Serialized offer - id:", payload.id, "ts:", payload.ts)
+                        print("[\(timeString)] [WebRTC] Serialized offer length:", serialized.count)
+                        offerCompletion(serialized)
+                    } catch {
+                        print("[\(timeString)] [WebRTC] ERROR serializing offer:", error)
+                        offerCompletion(nil)
+                    }
+                } else {
+                    print("[\(timeString)] [WebRTC] ERROR: No local description for offer")
+                    offerCompletion(nil)
+                }
                 self.offerCompletion = nil
             }
             
             // Для answer
             if let answerCompletion, peerConnection.localDescription?.type == .answer {
                 let sdp = peerConnection.localDescription?.sdp
-                print("[\(timeString)] [WebRTC] Returning answer SDP with length:", sdp?.count ?? 0)
-                answerCompletion(sdp)
+                if let sdp = sdp {
+                    // Сериализуем SDP через JSON → gzip → base64
+                    do {
+                        let payload = SdpPayload(sdp: sdp)
+                        let serialized = try SdpSerializer.serializeSdp(payload)
+                        print("[\(timeString)] [WebRTC] Serialized answer - id:", payload.id, "ts:", payload.ts)
+                        print("[\(timeString)] [WebRTC] Serialized answer length:", serialized.count)
+                        answerCompletion(serialized)
+                    } catch {
+                        print("[\(timeString)] [WebRTC] ERROR serializing answer:", error)
+                        answerCompletion(nil)
+                    }
+                } else {
+                    print("[\(timeString)] [WebRTC] ERROR: No local description for answer")
+                    answerCompletion(nil)
+                }
                 self.answerCompletion = nil
             }
         }
     }
 }
 
+// MARK: - RTCPeerConnectionDelegate
 extension WebRTCManager: RTCPeerConnectionDelegate {
-    // Реализация только нужных методов (здесь пока пусто)
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Signaling state changed:", stateChanged.rawValue)
@@ -313,12 +367,12 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Media stream added")
+        print("[\(timeString)] [WebRTC] Stream added")
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Media stream removed")
+        print("[\(timeString)] [WebRTC] Stream removed")
     }
     
     func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {
@@ -328,41 +382,34 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] ICE connection state:", newState.rawValue)
+        print("[\(timeString)] [WebRTC] ICE connection state changed:", newState.rawValue)
         DispatchQueue.main.async {
-            self.iceConnectionState = "ICE: \(newState.rawValue)"
+            self.iceConnectionState = "\(newState.rawValue)"
         }
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] ICE gathering state:", newState.rawValue)
-        
+        print("[\(timeString)] [WebRTC] ICE gathering state changed:", newState.rawValue)
         DispatchQueue.main.async {
-            self.iceGatheringState = "ICE Gathering: \(newState.rawValue)"
-        }
-        
-        // При завершении ICE gathering логируем, но SDP уже отдали ранее
-        if newState == .complete {
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ICE gathering completed (SDP already returned)")
+            self.iceGatheringState = "\(newState.rawValue)"
         }
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] ICE candidate generated")
+        print("[\(timeString)] [WebRTC] ICE candidate added:", candidate.sdp)
         
-        // Увеличиваем счетчик кандидатов
         internalCandidateCount += 1
         DispatchQueue.main.async {
             self.candidateCount = "\(self.internalCandidateCount)"
         }
         
-        // Проверяем, является ли это relay кандидатом (TURN)
-        if candidate.sdp.contains(" typ relay") {
+        // Проверяем, есть ли relay кандидат (TURN)
+        if candidate.sdp.contains("relay") {
             hasRelayCandidate = true
-            print("[\(timeString)] [WebRTC] Relay candidate detected!")
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] Relay candidate found!")
         }
         
         // Проверяем готовность для отдачи SDP
@@ -371,46 +418,41 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] ICE candidates removed")
+        print("[\(timeString)] [WebRTC] ICE candidates removed:", candidates.count)
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] didOpen dataChannel:", dataChannel.label)
-        self.dataChannel = dataChannel
+        print("[\(timeString)] [WebRTC] DataChannel opened")
         dataChannel.delegate = self
         DispatchQueue.main.async {
-            self.isConnected = true
-            self.dataChannelState = "открыт (получен): \(dataChannel.readyState.rawValue)"
+            self.dataChannelState = "открыт (receiver): \(dataChannel.readyState.rawValue)"
         }
     }
 }
 
+// MARK: - RTCDataChannelDelegate
 extension WebRTCManager: RTCDataChannelDelegate {
-    func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
-        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] DataChannel state:", dataChannel.readyState.rawValue)
-        DispatchQueue.main.async {
-            self.dataChannelState = "состояние: \(dataChannel.readyState.rawValue)"
-        }
-        if dataChannel.readyState == .open {
-            DispatchQueue.main.async {
-                self.isConnected = true
-                self.dataChannelState = "открыт: \(dataChannel.readyState.rawValue)"
-            }
-        }
-    }
-
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] DataChannel received message:", buffer.data)
-        if let text = String(data: buffer.data, encoding: .utf8) {
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] Received text:", text)
+        if let message = String(data: buffer.data, encoding: .utf8) {
+            print("[\(timeString)] [WebRTC] Received message:", message)
             DispatchQueue.main.async {
-                self.receivedMessage = text
+                self.receivedMessage = message
             }
         }
     }
-}
-
+    
+    func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
+        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] DataChannel state changed:", dataChannel.readyState.rawValue)
+        DispatchQueue.main.async {
+            self.dataChannelState = "\(dataChannel.readyState.rawValue)"
+            if dataChannel.readyState == .open {
+                self.isConnected = true
+            } else {
+                self.isConnected = false
+            }
+        }
+    }
+} 
