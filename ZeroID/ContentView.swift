@@ -21,6 +21,7 @@ enum Screen {
     case choice
     case handshakeOffer
     case handshakeAnswer
+    case fingerprintVerification
     case chat
     case settings
     case error(String)
@@ -236,6 +237,17 @@ struct ContentView: View {
                             }
                     )
                     
+                case .fingerprintVerification:
+                    FingerprintVerificationView(
+                        webRTCManager: vm.webrtc,
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        }
+                    )
+                    
                 case .error(let error):
                     ErrorView(
                         error: error,
@@ -257,6 +269,23 @@ struct ContentView: View {
             if connected && connectionState != .connected {
                 print("[ContentView] Transitioning to connected state")
                 connectionState = .connected
+            }
+        }
+        .onReceive(vm.webrtc.$fingerprintVerificationState) { state in
+            print("[ContentView] Fingerprint verification state changed to:", state)
+            switch state {
+            case .verificationRequired:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    screen = .fingerprintVerification
+                }
+            case .verified:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    screen = .chat
+                }
+            case .failed:
+                showToast(message: "Сверка отпечатков не удалась")
+            default:
+                break
             }
         }
     }

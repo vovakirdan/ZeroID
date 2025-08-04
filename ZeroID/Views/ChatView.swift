@@ -25,6 +25,17 @@ struct ChatView: View {
         .padding()
     }
     
+    // Состояние ожидания сверки отпечатков
+    private var waitingFingerprintView: some View {
+        VStack(spacing: 16) {
+            LoaderView(text: "Сверка отпечатков...")
+            Text("🔐 Ожидание подтверждения отпечатков...")
+                .foregroundColor(.blue)
+                .font(.caption)
+        }
+        .padding()
+    }
+    
     // Список сообщений
     private var messagesList: some View {
         ScrollViewReader { proxy in
@@ -56,6 +67,8 @@ struct ChatView: View {
         ZStack {
             if !vm.webrtc.isConnected {
                 waitingConnectionView
+            } else if !vm.webrtc.isChatEnabled {
+                waitingFingerprintView
             } else {
                 messagesList
             }
@@ -64,7 +77,9 @@ struct ChatView: View {
     
     // Проверка возможности отправки сообщения
     private var canSendMessage: Bool {
-        vm.webrtc.isConnected && !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        vm.webrtc.isConnected && 
+        vm.webrtc.isChatEnabled && 
+        !vm.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     // Цвет фона инпут поля в зависимости от темы
