@@ -40,6 +40,8 @@ class WebRTCManager: NSObject, ObservableObject {
         // Запускаем тесты сериализации при инициализации
         #if DEBUG
         SdpSerializerTests.testSerializationPipeline()
+        SdpSerializerTests.testConnectionBundlePipeline()
+        SdpSerializerTests.testAutoDetection()
         SdpSerializerTests.testCompressionRatio()
         #endif
         
@@ -155,11 +157,12 @@ class WebRTCManager: NSObject, ObservableObject {
             self.checkIfReadyToReturnSDP(pc)
         }
         
-        // Десериализуем SDP через base64 → gzip → JSON
+        // Десериализуем SDP с автоматическим определением типа (Legacy vs New API)
         do {
-            let payload = try SdpSerializer.deserializeSdp(offerSDP)
+            let (payload, iceCandidates) = try SdpSerializer.deserializeAuto(offerSDP)
             print("[\(timeString)] [WebRTC] Deserialized offer payload - id:", payload.id, "ts:", payload.ts)
             print("[\(timeString)] [WebRTC] Offer SDP length:", payload.sdp.count)
+            print("[\(timeString)] [WebRTC] ICE candidates count:", iceCandidates.count)
             
             if payload.sdp.isEmpty {
                 let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
@@ -233,11 +236,12 @@ class WebRTCManager: NSObject, ObservableObject {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: received answer, deserializing...")
         
-        // Десериализуем SDP через base64 → gzip → JSON
+        // Десериализуем SDP с автоматическим определением типа (Legacy vs New API)
         do {
-            let payload = try SdpSerializer.deserializeSdp(answerSDP)
+            let (payload, iceCandidates) = try SdpSerializer.deserializeAuto(answerSDP)
             print("[\(timeString)] [WebRTC] Deserialized answer payload - id:", payload.id, "ts:", payload.ts)
             print("[\(timeString)] [WebRTC] Answer SDP length:", payload.sdp.count)
+            print("[\(timeString)] [WebRTC] ICE candidates count:", iceCandidates.count)
             
             if payload.sdp.isEmpty {
                 let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
@@ -315,11 +319,12 @@ class WebRTCManager: NSObject, ObservableObject {
             if let offerCompletion, peerConnection.localDescription?.type == .offer {
                 let sdp = peerConnection.localDescription?.sdp
                 if let sdp = sdp {
-                    // Сериализуем SDP через JSON → gzip → base64
+                    // Сериализуем ConnectionBundle через JSON → gzip → base64 (новый API)
                     do {
                         let payload = SdpPayload(sdp: sdp)
-                        let serialized = try SdpSerializer.serializeSdp(payload)
-                        print("[\(timeString)] [WebRTC] Serialized offer - id:", payload.id, "ts:", payload.ts)
+                        let bundle = ConnectionBundle(sdp_payload: payload)
+                        let serialized = try SdpSerializer.serializeBundle(bundle)
+                        print("[\(timeString)] [WebRTC] Serialized offer bundle - id:", payload.id, "ts:", payload.ts)
                         print("[\(timeString)] [WebRTC] Serialized offer length:", serialized.count)
                         offerCompletion(serialized)
                     } catch {
@@ -337,11 +342,12 @@ class WebRTCManager: NSObject, ObservableObject {
             if let answerCompletion, peerConnection.localDescription?.type == .answer {
                 let sdp = peerConnection.localDescription?.sdp
                 if let sdp = sdp {
-                    // Сериализуем SDP через JSON → gzip → base64
+                    // Сериализуем ConnectionBundle через JSON → gzip → base64 (новый API)
                     do {
                         let payload = SdpPayload(sdp: sdp)
-                        let serialized = try SdpSerializer.serializeSdp(payload)
-                        print("[\(timeString)] [WebRTC] Serialized answer - id:", payload.id, "ts:", payload.ts)
+                        let bundle = ConnectionBundle(sdp_payload: payload)
+                        let serialized = try SdpSerializer.serializeBundle(bundle)
+                        print("[\(timeString)] [WebRTC] Serialized answer bundle - id:", payload.id, "ts:", payload.ts)
                         print("[\(timeString)] [WebRTC] Serialized answer length:", serialized.count)
                         answerCompletion(serialized)
                     } catch {

@@ -26,6 +26,14 @@ struct SdpSerializer {
         return try JSONDecoder().decode(SdpPayload.self, from: data)
     }
     
+    static func encodeConnectionBundle(_ bundle: ConnectionBundle) throws -> Data {
+        return try JSONEncoder().encode(bundle)
+    }
+    
+    static func decodeConnectionBundle(_ data: Data) throws -> ConnectionBundle {
+        return try JSONDecoder().decode(ConnectionBundle.self, from: data)
+    }
+    
     // MARK: - Base64 кодирование/декодирование
     
     static func base64Encode(_ data: Data) -> String {
@@ -36,7 +44,7 @@ struct SdpSerializer {
         return Data(base64Encoded: str)
     }
     
-    // MARK: - Полный пайплайн сериализации
+    // MARK: - Полный пайплайн сериализации (Legacy API - только SdpPayload)
     
     static func serializeSdp(_ payload: SdpPayload) throws -> String {
         let json = try encodeSdpPayload(payload)
@@ -50,6 +58,36 @@ struct SdpSerializer {
         }
         let json = try gzipDecompress(compressed)
         return try decodeSdpPayload(json)
+    }
+    
+    // MARK: - Полный пайплайн сериализации (Новый API - ConnectionBundle)
+    
+    static func serializeBundle(_ bundle: ConnectionBundle) throws -> String {
+        let json = try encodeConnectionBundle(bundle)
+        let compressed = try gzipCompress(json)
+        return base64Encode(compressed)
+    }
+    
+    static func deserializeBundle(_ str: String) throws -> ConnectionBundle {
+        guard let compressed = base64Decode(str) else {
+            throw SdpSerializerError.invalidBase64
+        }
+        let json = try gzipDecompress(compressed)
+        return try decodeConnectionBundle(json)
+    }
+    
+    // MARK: - Автоматическое определение типа (Legacy vs New API)
+    
+    static func deserializeAuto(_ str: String) throws -> (sdpPayload: SdpPayload, iceCandidates: [IceCandidate]) {
+        // Сначала пробуем как ConnectionBundle (новый API)
+        do {
+            let bundle = try deserializeBundle(str)
+            return (bundle.sdp_payload, bundle.ice_candidates)
+        } catch {
+            // Если не получилось, пробуем как SdpPayload (legacy API)
+            let payload = try deserializeSdp(str)
+            return (payload, [])
+        }
     }
 }
 
