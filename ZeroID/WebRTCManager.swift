@@ -154,9 +154,18 @@ class WebRTCManager: NSObject, ObservableObject {
     
     // Отправка pubkey через data channel
     private func sendPubKey() {
-        guard let dc = dataChannel, dc.readyState == .open else {
+        guard let dc = dataChannel else {
             let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString)] [WebRTC] ERROR: DataChannel not ready for sending pubkey")
+            print("[\(timeString)] [WebRTC] ERROR: DataChannel is nil")
+            return
+        }
+        
+        // Проверяем состояние DataChannel
+        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] DataChannel state before sending pubkey:", dc.readyState.rawValue)
+        
+        guard dc.readyState == .open else {
+            print("[\(timeString)] [WebRTC] ERROR: DataChannel not ready for sending pubkey, state:", dc.readyState.rawValue)
             return
         }
         
@@ -165,21 +174,31 @@ class WebRTCManager: NSObject, ObservableObject {
         
         let message = "PUBKEY:" + pubKey
         let buffer = RTCDataBuffer(data: message.data(using: .utf8)!, isBinary: false)
-        dc.sendData(buffer)
+        let success = dc.sendData(buffer)
         
-        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Sent pubkey:", pubKey)
-        
-        // Переходим в состояние ожидания pubkey от peer
-        DispatchQueue.main.async {
-            self.fingerprintVerificationState = .waitingForPeerPubkey
+        if success {
+            print("[\(timeString)] [WebRTC] Successfully sent pubkey:", pubKey)
+            
+            // Переходим в состояние ожидания pubkey от peer
+            DispatchQueue.main.async {
+                self.fingerprintVerificationState = .waitingForPeerPubkey
+            }
+        } else {
+            print("[\(timeString)] [WebRTC] ERROR: Failed to send pubkey")
         }
     }
     
     // Обработка полученного pubkey
     private func handleReceivedPubKey(_ pubKey: String) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] Processing received pubkey, length:", pubKey.count)
         print("[\(timeString)] [WebRTC] Received pubkey:", pubKey)
+        
+        // Проверяем, что pubkey не пустой
+        guard !pubKey.isEmpty else {
+            print("[\(timeString)] [WebRTC] ERROR: Received empty pubkey")
+            return
+        }
         
         peerPubKey = pubKey
         
@@ -699,12 +718,15 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
 extension WebRTCManager: RTCDataChannelDelegate {
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] Received message, length:", buffer.data.count)
+        
         if let message = String(data: buffer.data, encoding: .utf8) {
-            print("[\(timeString)] [WebRTC] Received message:", message)
+            print("[\(timeString)] [WebRTC] Received text message:", message)
             
             // Проверяем, является ли это pubkey сообщением
             if message.hasPrefix("PUBKEY:") {
                 let pubKey = String(message.dropFirst(7)) // Убираем "PUBKEY:" префикс
+                print("[\(timeString)] [WebRTC] Processing PUBKEY message, extracted key:", pubKey)
                 handleReceivedPubKey(pubKey)
             } else {
                 // Обычное сообщение чата (только если сверка завершена)
@@ -717,23 +739,41 @@ extension WebRTCManager: RTCDataChannelDelegate {
                     print("[\(timeString2)] [WebRTC] Ignoring chat message - fingerprint not verified")
                 }
             }
+        } else {
+            print("[\(timeString)] [WebRTC] Received binary message, length:", buffer.data.count)
+            // Обработка бинарных сообщений (если понадобится в будущем)
         }
     }
     
     func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] DataChannel state changed:", dataChannel.readyState.rawValue)
+        
         DispatchQueue.main.async {
             self.dataChannelState = "\(dataChannel.readyState.rawValue)"
-            if dataChannel.readyState == .open {
+            
+            switch dataChannel.readyState {
+            case .open:
                 self.isConnected = true
+                print("[\(timeString)] [WebRTC] DataChannel opened - sending pubkey")
                 // Отправляем pubkey при открытии data channel
                 self.sendPubKey()
-            } else {
+                
+            case .closed:
                 self.isConnected = false
+                print("[\(timeString)] [WebRTC] DataChannel closed - resetting verification state")
                 // Сбрасываем состояние сверки при закрытии
                 self.fingerprintVerificationState = .notStarted
                 self.isChatEnabled = false
+                
+            case .connecting:
+                print("[\(timeString)] [WebRTC] DataChannel connecting...")
+                
+            case .closing:
+                print("[\(timeString)] [WebRTC] DataChannel closing...")
+                
+            @unknown default:
+                print("[\(timeString)] [WebRTC] DataChannel unknown state:", dataChannel.readyState.rawValue)
             }
         }
     }
