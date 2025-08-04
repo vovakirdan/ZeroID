@@ -172,7 +172,8 @@ class WebRTCManager: NSObject, ObservableObject {
         do {
             let (payload, iceCandidates) = try SdpSerializer.deserializeAuto(offerSDP)
             print("[\(timeString)] [WebRTC] Deserialized offer payload - id:", payload.id, "ts:", payload.ts)
-            print("[\(timeString)] [WebRTC] Offer SDP length:", payload.sdp.count)
+            print("[\(timeString)] [WebRTC] Offer SDP type:", payload.sdp.type)
+            print("[\(timeString)] [WebRTC] Offer SDP length:", payload.sdp.sdp.count)
             print("[\(timeString)] [WebRTC] ICE candidates count:", iceCandidates.count)
             
             // Устанавливаем connection ID из полученного payload
@@ -182,7 +183,7 @@ class WebRTCManager: NSObject, ObservableObject {
             // Очищаем старые кандидаты
             self.collectedIceCandidates.removeAll()
             
-            if payload.sdp.isEmpty {
+            if payload.sdp.sdp.isEmpty {
                 let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
                 print("[\(timeString2)] [WebRTC] ERROR: Deserialized SDP is empty")
                 completion(nil)
@@ -190,20 +191,20 @@ class WebRTCManager: NSObject, ObservableObject {
             }
             
             // Проверяем, что SDP начинается с правильного формата
-            if !payload.sdp.hasPrefix("v=0") {
+            if !payload.sdp.sdp.hasPrefix("v=0") {
                 let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
                 print("[\(timeString2)] [WebRTC] ERROR: Deserialized SDP has invalid format (should start with 'v=0')")
-                print("[\(timeString2)] [WebRTC] SDP starts with:", String(payload.sdp.prefix(10)))
+                print("[\(timeString2)] [WebRTC] SDP starts with:", String(payload.sdp.sdp.prefix(10)))
                 completion(nil)
                 return
             }
             
             // Детальное логирование SDP для диагностики
             let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] Offer SDP content (first 100 chars):", String(payload.sdp.prefix(100)))
+            print("[\(timeString2)] [WebRTC] Offer SDP content (first 100 chars):", String(payload.sdp.sdp.prefix(100)))
             
             self.peerConnection = createPeerConnection()
-            let sdp = RTCSessionDescription(type: .offer, sdp: payload.sdp)
+            let sdp = RTCSessionDescription(type: .offer, sdp: payload.sdp.sdp)
             
             // Применяем полученные ICE-кандидаты после установки remote description
             for candidate in iceCandidates {
@@ -213,7 +214,12 @@ class WebRTCManager: NSObject, ObservableObject {
                     sdpMLineIndex: Int32(candidate.sdp_mline_index ?? 0),
                     sdpMid: candidate.sdp_mid
                 )
-                peerConnection?.add(rtcCandidate)
+                peerConnection?.add(rtcCandidate) { error in
+                    if let error = error {
+                        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                        print("[\(timeString2)] [WebRTC] ERROR adding ICE candidate:", error)
+                    }
+                }
             }
             
             peerConnection?.setRemoteDescription(sdp, completionHandler: { [weak self] error in
@@ -269,26 +275,26 @@ class WebRTCManager: NSObject, ObservableObject {
         do {
             let (payload, iceCandidates) = try SdpSerializer.deserializeAuto(answerSDP)
             print("[\(timeString)] [WebRTC] Deserialized answer payload - id:", payload.id, "ts:", payload.ts)
-            print("[\(timeString)] [WebRTC] Answer SDP length:", payload.sdp.count)
+            print("[\(timeString)] [WebRTC] Answer SDP length:", payload.sdp.sdp.count)
             print("[\(timeString)] [WebRTC] ICE candidates count:", iceCandidates.count)
             
-            if payload.sdp.isEmpty {
+            if payload.sdp.sdp.isEmpty {
                 let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
                 print("[\(timeString2)] [WebRTC] ERROR: Deserialized SDP is empty")
                 return
             }
             
             // Проверяем, что SDP начинается с правильного формата
-            if !payload.sdp.hasPrefix("v=0") {
+            if !payload.sdp.sdp.hasPrefix("v=0") {
                 let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
                 print("[\(timeString3)] [WebRTC] ERROR: Deserialized SDP has invalid format (should start with 'v=0')")
-                print("[\(timeString3)] [WebRTC] SDP starts with:", String(payload.sdp.prefix(10)))
+                print("[\(timeString3)] [WebRTC] SDP starts with:", String(payload.sdp.sdp.prefix(10)))
                 return
             }
             
             // Детальное логирование SDP для диагностики
             let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] Answer SDP content (first 100 chars):", String(payload.sdp.prefix(100)))
+            print("[\(timeString2)] [WebRTC] Answer SDP content (first 100 chars):", String(payload.sdp.sdp.prefix(100)))
             
             guard let pc = self.peerConnection else { 
                 let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
@@ -296,7 +302,7 @@ class WebRTCManager: NSObject, ObservableObject {
                 return 
             }
             
-            let sdp = RTCSessionDescription(type: .answer, sdp: payload.sdp)
+            let sdp = RTCSessionDescription(type: .answer, sdp: payload.sdp.sdp)
             
             // Применяем полученные ICE-кандидаты
             for candidate in iceCandidates {
@@ -306,7 +312,12 @@ class WebRTCManager: NSObject, ObservableObject {
                     sdpMLineIndex: Int32(candidate.sdp_mline_index ?? 0),
                     sdpMid: candidate.sdp_mid
                 )
-                pc.add(rtcCandidate)
+                pc.add(rtcCandidate) { error in
+                    if let error = error {
+                        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                        print("[\(timeString2)] [WebRTC] ERROR adding ICE candidate from answer:", error)
+                    }
+                }
             }
             
             pc.setRemoteDescription(sdp, completionHandler: { err in
@@ -361,7 +372,12 @@ class WebRTCManager: NSObject, ObservableObject {
                 if let sdp = sdp {
                     // Сериализуем ConnectionBundle через JSON → gzip → base64 (новый API)
                     do {
-                        let payload = SdpPayload(sdp: sdp, id: currentConnectionId ?? UUID().uuidString, ts: Int64(Date().timeIntervalSince1970))
+                        let payload = SdpPayload(
+                            sdp: sdp,
+                            type: "offer",
+                            id: currentConnectionId ?? UUID().uuidString,
+                            ts: Int64(Date().timeIntervalSince1970)
+                        )
                         let bundle = ConnectionBundle(sdp_payload: payload, ice_candidates: collectedIceCandidates)
                         let serialized = try SdpSerializer.serializeBundle(bundle)
                         print("[\(timeString)] [WebRTC] Serialized offer bundle - id:", payload.id, "ts:", payload.ts)
@@ -389,7 +405,12 @@ class WebRTCManager: NSObject, ObservableObject {
                 if let sdp = sdp {
                     // Сериализуем ConnectionBundle через JSON → gzip → base64 (новый API)
                     do {
-                        let payload = SdpPayload(sdp: sdp, id: currentConnectionId ?? UUID().uuidString, ts: Int64(Date().timeIntervalSince1970))
+                        let payload = SdpPayload(
+                            sdp: sdp,
+                            type: "answer",
+                            id: currentConnectionId ?? UUID().uuidString,
+                            ts: Int64(Date().timeIntervalSince1970)
+                        )
                         let bundle = ConnectionBundle(sdp_payload: payload, ice_candidates: collectedIceCandidates)
                         let serialized = try SdpSerializer.serializeBundle(bundle)
                         print("[\(timeString)] [WebRTC] Serialized answer bundle - id:", payload.id, "ts:", payload.ts)

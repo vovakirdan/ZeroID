@@ -44,7 +44,7 @@ struct SdpSerializer {
         return Data(base64Encoded: str)
     }
     
-    // MARK: - Полный пайплайн сериализации (Legacy API - только SdpPayload)
+    // MARK: - Полный пайплайн сериализации (Legacy API)
     
     static func serializeSdp(_ payload: SdpPayload) throws -> String {
         let json = try encodeSdpPayload(payload)
@@ -60,7 +60,7 @@ struct SdpSerializer {
         return try decodeSdpPayload(json)
     }
     
-    // MARK: - Полный пайплайн сериализации (Новый API - ConnectionBundle)
+    // MARK: - Полный пайплайн сериализации (новый API с ConnectionBundle)
     
     static func serializeBundle(_ bundle: ConnectionBundle) throws -> String {
         let json = try encodeConnectionBundle(bundle)
@@ -78,14 +78,19 @@ struct SdpSerializer {
     
     // MARK: - Автоматическое определение типа (Legacy vs New API)
     
-    static func deserializeAuto(_ str: String) throws -> (sdpPayload: SdpPayload, iceCandidates: [IceCandidate]) {
-        // Сначала пробуем как ConnectionBundle (новый API)
+    static func deserializeAuto(_ str: String) throws -> (SdpPayload, [IceCandidate]) {
+        guard let compressed = base64Decode(str) else {
+            throw SdpSerializerError.invalidBase64
+        }
+        let json = try gzipDecompress(compressed)
+        
+        // Пытаемся сначала десериализовать как ConnectionBundle (новый API)
         do {
-            let bundle = try deserializeBundle(str)
+            let bundle = try decodeConnectionBundle(json)
             return (bundle.sdp_payload, bundle.ice_candidates)
         } catch {
-            // Если не получилось, пробуем как SdpPayload (legacy API)
-            let payload = try deserializeSdp(str)
+            // Если не получилось, пробуем как SdpPayload (Legacy API)
+            let payload = try decodeSdpPayload(json)
             return (payload, [])
         }
     }

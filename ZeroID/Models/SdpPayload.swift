@@ -1,20 +1,43 @@
 import Foundation
 
+// Структура для совместимости с Rust RTCSessionDescription
+struct RTCSessionDescriptionCodable: Codable {
+    let type: String // "offer" или "answer"
+    let sdp: String
+    
+    init(type: String, sdp: String) {
+        self.type = type
+        self.sdp = sdp
+    }
+}
+
 // Структура для совместимости с Rust SdpPayload
 struct SdpPayload: Codable {
-    let sdp: String
+    let sdp: RTCSessionDescriptionCodable
     let id: String
     let ts: Int64
     
-    init(sdp: String, id: String, ts: Int64) {
-        self.sdp = sdp
+    init(sdp: String, type: String, id: String, ts: Int64) {
+        self.sdp = RTCSessionDescriptionCodable(type: type, sdp: sdp)
         self.id = id
         self.ts = ts
     }
     
-    // Конструктор с автоматической генерацией id и timestamp
+    init(sdp: String, type: String) {
+        self.sdp = RTCSessionDescriptionCodable(type: type, sdp: sdp)
+        self.id = UUID().uuidString
+        self.ts = Int64(Date().timeIntervalSince1970)
+    }
+    
+    // Конструктор для обратной совместимости (Legacy API)
+    init(sdp: String, id: String, ts: Int64) {
+        self.sdp = RTCSessionDescriptionCodable(type: "unknown", sdp: sdp)
+        self.id = id
+        self.ts = ts
+    }
+    
     init(sdp: String) {
-        self.sdp = sdp
+        self.sdp = RTCSessionDescriptionCodable(type: "unknown", sdp: sdp)
         self.id = UUID().uuidString
         self.ts = Int64(Date().timeIntervalSince1970)
     }
@@ -35,7 +58,7 @@ struct IceCandidate: Codable {
     }
 }
 
-// Основная структура для обмена с Rust (новый API)
+// Структура для совместимости с Rust ConnectionBundle
 struct ConnectionBundle: Codable {
     let sdp_payload: SdpPayload
     let ice_candidates: [IceCandidate]
