@@ -93,41 +93,63 @@ class WebRTCManager: NSObject, ObservableObject {
 
     // MARK: - Fingerprint Verification
     
+    // Парсинг DTLS fingerprint из SDP строки
+    private func parseFingerprint(from sdp: String) -> String? {
+        // Ищем строку вида a=fingerprint:sha-256 AA:BB:CC:...
+        let pattern = #"a=fingerprint:sha-256 ([A-F0-9:]+)"#
+        if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: sdp, options: [], range: NSRange(location: 0, length: sdp.utf16.count)),
+           let range = Range(match.range(at: 1), in: sdp) {
+            return String(sdp[range])
+        }
+        return nil
+    }
+    
     // Генерация публичного ключа (заглушка для демонстрации)
     private func generatePubKey() -> String {
-        // В реальной реализации здесь будет генерация X25519 ключа
-        // Пока используем случайные данные для демонстрации
+        // Заглушка: генерируем случайный pubkey для демонстрации
         let randomData = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
         return randomData.base64EncodedString()
     }
     
     // Получение DTLS fingerprint от remote peer
     private func getRemoteFingerprint() -> String? {
-        guard peerConnection != nil else { return nil }
+        guard let peerConnection = peerConnection,
+              let remoteSdp = peerConnection.remoteDescription?.sdp else { 
+            return nil 
+        }
         
-        // Получаем сертификаты remote peer
-        // Примечание: в реальной реализации нужно использовать правильный API
-        // для получения DTLS fingerprint
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Getting remote fingerprint...")
+        print("[\(timeString)] [WebRTC] Getting remote fingerprint from SDP...")
         
-        // Заглушка: генерируем случайный fingerprint для демонстрации
-        let randomData = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        let fingerprint = SHA256.hash(data: randomData)
-        return fingerprint.compactMap { String(format: "%02x", $0) }.joined()
+        // Парсим fingerprint из remote SDP
+        if let fingerprint = parseFingerprint(from: remoteSdp) {
+            print("[\(timeString)] [WebRTC] Remote fingerprint found: \(fingerprint)")
+            return fingerprint
+        } else {
+            print("[\(timeString)] [WebRTC] ERROR: No fingerprint found in remote SDP")
+            return nil
+        }
     }
     
     // Получение локального DTLS fingerprint
     private func getLocalFingerprint() -> String? {
-        guard peerConnection != nil else { return nil }
+        guard let peerConnection = peerConnection,
+              let localSdp = peerConnection.localDescription?.sdp else { 
+            return nil 
+        }
         
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Getting local fingerprint...")
+        print("[\(timeString)] [WebRTC] Getting local fingerprint from SDP...")
         
-        // Заглушка: генерируем случайный fingerprint для демонстрации
-        let randomData = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        let fingerprint = SHA256.hash(data: randomData)
-        return fingerprint.compactMap { String(format: "%02x", $0) }.joined()
+        // Парсим fingerprint из local SDP
+        if let fingerprint = parseFingerprint(from: localSdp) {
+            print("[\(timeString)] [WebRTC] Local fingerprint found: \(fingerprint)")
+            return fingerprint
+        } else {
+            print("[\(timeString)] [WebRTC] ERROR: No fingerprint found in local SDP")
+            return nil
+        }
     }
     
     // Отправка pubkey через data channel
@@ -161,18 +183,36 @@ class WebRTCManager: NSObject, ObservableObject {
         
         peerPubKey = pubKey
         
-        // Получаем fingerprint'ы
+        // Получаем fingerprint обеих сторон
         if let localFingerprint = getLocalFingerprint() {
             myFingerprint = localFingerprint
+            print("[\(timeString)] [WebRTC] Local fingerprint set: \(localFingerprint)")
+        } else {
+            print("[\(timeString)] [WebRTC] ERROR: Failed to get local fingerprint")
         }
         
         if let remoteFingerprint = getRemoteFingerprint() {
             peerFingerprint = remoteFingerprint
+            print("[\(timeString)] [WebRTC] Remote fingerprint set: \(remoteFingerprint)")
+        } else {
+            print("[\(timeString)] [WebRTC] ERROR: Failed to get remote fingerprint")
         }
         
-        // Переходим в состояние ожидания сверки
-        DispatchQueue.main.async {
-            self.fingerprintVerificationState = .verificationRequired
+        // Проверяем, что у нас есть оба fingerprint
+        if !myFingerprint.isEmpty && !peerFingerprint.isEmpty {
+            // Переходим в состояние ожидания подтверждения
+            DispatchQueue.main.async {
+                self.fingerprintVerificationState = .verificationRequired
+            }
+            
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] Fingerprint verification required - my: \(myFingerprint), peer: \(peerFingerprint)")
+        } else {
+            // Если не удалось получить fingerprint, переходим в состояние ошибки
+            DispatchQueue.main.async {
+                self.fingerprintVerificationState = .failed
+            }
+            print("[\(timeString)] [WebRTC] ERROR: Cannot proceed with verification - missing fingerprints")
         }
     }
     
