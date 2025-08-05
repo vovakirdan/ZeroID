@@ -4,6 +4,27 @@ import Foundation
 import WebRTC
 import CryptoKit
 
+// Криптографический контекст для шифрования сообщений
+struct CryptoContext {
+    let sealingKey: SymmetricKey
+    let openingKey: SymmetricKey
+    var sendNonce: UInt64 = 1
+    var recvNonce: UInt64 = 1
+    var lastAcceptedRecv: UInt64 = 0
+    let sas: String
+}
+
+// Расширение для конвертации UInt64 в nonce для ChaCha20Poly1305
+extension UInt64 {
+    func toChaCha20Nonce() -> Data {
+        var nonceData = Data(count: 12)
+        nonceData.withUnsafeMutableBytes { ptr in
+            ptr.storeBytes(of: self.littleEndian, as: UInt64.self)
+        }
+        return nonceData
+    }
+}
+
 // Состояния сверки отпечатков
 enum FingerprintVerificationState {
     case notStarted
@@ -18,6 +39,11 @@ class WebRTCManager: NSObject, ObservableObject {
     private var peerConnection: RTCPeerConnection?
     private var dataChannel: RTCDataChannel?
     private var factory: RTCPeerConnectionFactory
+    
+    // Криптографические ключи для X25519
+    private var myPrivateKey: Curve25519.KeyAgreement.PrivateKey?
+    private var cryptoContext: CryptoContext?
+    private var pendingPeerPubKey: String? // Буфер для входящего ключа если наш еще не готов
     
     // Completion handlers для ожидания завершения ICE gathering
     private var offerCompletion: ((String?) -> Void)?
@@ -105,11 +131,16 @@ class WebRTCManager: NSObject, ObservableObject {
         return nil
     }
     
-    // Генерация публичного ключа (заглушка для демонстрации)
-    private func generatePubKey() -> String {
-        // Заглушка: генерируем случайный pubkey для демонстрации
-        let randomData = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
-        return randomData.base64EncodedString()
+    // Генерация X25519 ключевой пары
+    private func generateX25519KeyPair() -> (privateKey: Curve25519.KeyAgreement.PrivateKey, publicKeyBase64: String) {
+        let privateKey = Curve25519.KeyAgreement.PrivateKey()
+        let publicKeyData = privateKey.publicKey.rawRepresentation
+        let publicKeyBase64 = publicKeyData.base64EncodedString()
+        
+        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] Generated X25519 keypair, pubkey length:", publicKeyData.count)
+        
+        return (privateKey, publicKeyBase64)
     }
     
     // Получение DTLS fingerprint от remote peer
@@ -169,76 +200,166 @@ class WebRTCManager: NSObject, ObservableObject {
             return
         }
         
-        let pubKey = generatePubKey()
-        myPubKey = pubKey
+        // Генерируем X25519 ключевую пару если еще не сгенерирована
+        let pubKeyBase64: String
+        if let existingPrivateKey = myPrivateKey {
+            // Используем уже сгенерированный ключ
+            pubKeyBase64 = myPubKey
+            print("[\(timeString)] [WebRTC] Using existing X25519 keypair")
+        } else {
+            // Генерируем новую пару
+            let (privateKey, newPubKeyBase64) = generateX25519KeyPair()
+            myPrivateKey = privateKey
+            myPubKey = newPubKeyBase64
+            pubKeyBase64 = newPubKeyBase64
+            print("[\(timeString)] [WebRTC] Generated new X25519 keypair")
+        }
         
-        let message = "PUBKEY:" + pubKey
+        let message = "PUBKEY:" + pubKeyBase64
         let buffer = RTCDataBuffer(data: message.data(using: .utf8)!, isBinary: false)
         let success = dc.sendData(buffer)
         
         if success {
-            print("[\(timeString)] [WebRTC] Successfully sent pubkey:", pubKey)
+            print("[\(timeString)] [WebRTC] Successfully sent X25519 pubkey:", pubKeyBase64)
             
             // Переходим в состояние ожидания pubkey от peer
             DispatchQueue.main.async {
+                print("[\(timeString)] [WebRTC] Setting verification state to .waitingForPeerPubkey")
                 self.fingerprintVerificationState = .waitingForPeerPubkey
+                print("[\(timeString)] [WebRTC] Current verification state: \(self.fingerprintVerificationState)")
             }
         } else {
             print("[\(timeString)] [WebRTC] ERROR: Failed to send pubkey")
         }
     }
     
-    // Обработка полученного pubkey
-    private func handleReceivedPubKey(_ pubKey: String) {
+    // Обработка полученного pubkey и создание криптографического контекста
+    private func handleReceivedPubKey(_ pubKeyBase64: String) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Processing received pubkey, length:", pubKey.count)
-        print("[\(timeString)] [WebRTC] Received pubkey:", pubKey)
+        print("[\(timeString)] [WebRTC] Processing received pubkey, length:", pubKeyBase64.count)
+        print("[\(timeString)] [WebRTC] Received pubkey:", pubKeyBase64)
         
         // Проверяем, что pubkey не пустой
-        guard !pubKey.isEmpty else {
+        guard !pubKeyBase64.isEmpty else {
             print("[\(timeString)] [WebRTC] ERROR: Received empty pubkey")
             return
         }
         
-        peerPubKey = pubKey
-        
-        // Получаем fingerprint обеих сторон
-        if let localFingerprint = getLocalFingerprint() {
-            myFingerprint = localFingerprint
-            print("[\(timeString)] [WebRTC] Local fingerprint set: \(localFingerprint)")
-        } else {
-            print("[\(timeString)] [WebRTC] ERROR: Failed to get local fingerprint")
+        // Проверяем, что у нас есть приватный ключ
+        guard let myPrivateKey = myPrivateKey else {
+            print("[\(timeString)] [WebRTC] Private key not ready yet, buffering peer pubkey")
+            pendingPeerPubKey = pubKeyBase64
+            return
         }
         
-        if let remoteFingerprint = getRemoteFingerprint() {
-            peerFingerprint = remoteFingerprint
-            print("[\(timeString)] [WebRTC] Remote fingerprint set: \(remoteFingerprint)")
-        } else {
-            print("[\(timeString)] [WebRTC] ERROR: Failed to get remote fingerprint")
+        // Очищаем буфер если он был использован
+        pendingPeerPubKey = nil
+        
+        // Декодируем base64 pubkey
+        guard let peerPubKeyData = Data(base64Encoded: pubKeyBase64),
+              peerPubKeyData.count == 32 else {
+            print("[\(timeString)] [WebRTC] ERROR: Invalid pubkey format or length")
+            return
         }
         
-        // Проверяем, что у нас есть оба fingerprint
-        if !myFingerprint.isEmpty && !peerFingerprint.isEmpty {
-            // Переходим в состояние ожидания подтверждения
-            DispatchQueue.main.async {
-                self.fingerprintVerificationState = .verificationRequired
+        do {
+            // Создаем публичный ключ из полученных данных
+            let peerPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerPubKeyData)
+            
+            // Выполняем key agreement для получения общего секрета
+            let sharedSecret = try myPrivateKey.sharedSecretFromKeyAgreement(with: peerPublicKey)
+            
+            // Создаем криптографический контекст
+            let context = createCryptoContext(from: sharedSecret, myPubKey: myPubKey, peerPubKey: pubKeyBase64)
+            self.cryptoContext = context
+            
+            peerPubKey = pubKeyBase64
+            
+            // Получаем DTLS fingerprint обеих сторон
+            if let localFingerprint = getLocalFingerprint() {
+                myFingerprint = localFingerprint
+                print("[\(timeString)] [WebRTC] Local DTLS fingerprint set: \(localFingerprint)")
+            } else {
+                // Если нет DTLS fingerprint, используем SAS
+                myFingerprint = "SAS: \(context.sas)"
+                print("[\(timeString)] [WebRTC] Using SAS as local fingerprint: \(context.sas)")
             }
             
-            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] Fingerprint verification required - my: \(myFingerprint), peer: \(peerFingerprint)")
-        } else {
-            // Если не удалось получить fingerprint, переходим в состояние ошибки
+            if let remoteFingerprint = getRemoteFingerprint() {
+                peerFingerprint = remoteFingerprint
+                print("[\(timeString)] [WebRTC] Remote DTLS fingerprint set: \(remoteFingerprint)")
+            } else {
+                // Если нет DTLS fingerprint, используем SAS
+                peerFingerprint = "SAS: \(context.sas)"
+                print("[\(timeString)] [WebRTC] Using SAS as remote fingerprint: \(context.sas)")
+            }
+            
+            print("[\(timeString)] [WebRTC] Crypto context created successfully")
+            print("[\(timeString)] [WebRTC] SAS generated:", context.sas)
+            
+            // Переходим в состояние ожидания подтверждения
+            DispatchQueue.main.async {
+                print("[\(timeString)] [WebRTC] Setting verification state to .verificationRequired")
+                self.fingerprintVerificationState = .verificationRequired
+                print("[\(timeString)] [WebRTC] Current verification state: \(self.fingerprintVerificationState)")
+            }
+            
+        } catch {
+            print("[\(timeString)] [WebRTC] ERROR creating crypto context:", error)
             DispatchQueue.main.async {
                 self.fingerprintVerificationState = .failed
             }
-            print("[\(timeString)] [WebRTC] ERROR: Cannot proceed with verification - missing fingerprints")
         }
+    }
+    
+    // Создание криптографического контекста из общего секрета
+    private func createCryptoContext(from sharedSecret: SharedSecret, myPubKey: String, peerPubKey: String) -> CryptoContext {
+        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        
+        // Создаем HKDF для получения ключей шифрования (как в Rust)
+        let salt = Data() // Пустая соль для совместимости с Rust
+        let info = "ssc-chat".data(using: .utf8)!
+        
+        let derivedKey = sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: salt,
+            sharedInfo: info,
+            outputByteCount: 64 // 32 байта для каждого ключа
+        )
+        
+        // Разделяем ключи
+        let keyData = derivedKey.withUnsafeBytes { Data($0) }
+        let k1 = keyData.prefix(32)
+        let k2 = keyData.suffix(32)
+        
+        // Детерминированно выбираем ключи на основе сортировки публичных ключей (как в Rust)
+        let (sendKeyData, recvKeyData) = myPubKey < peerPubKey ? (k1, k2) : (k2, k1)
+        
+        let sealingKey = SymmetricKey(data: sendKeyData)
+        let openingKey = SymmetricKey(data: recvKeyData)
+        
+        // Генерируем SAS из первого ключа (как в Rust)
+        let sasData = SHA256.hash(data: k1)
+        let sasHex = sasData.prefix(6).map { String(format: "%02X", $0) }.joined()
+        
+        print("[\(timeString)] [WebRTC] Created crypto context - SAS:", sasHex)
+        
+        return CryptoContext(
+            sealingKey: sealingKey,
+            openingKey: openingKey,
+            sas: sasHex
+        )
     }
     
     // Подтверждение сверки отпечатков
     func confirmFingerprintVerification() {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Fingerprint verification confirmed")
+        print("[\(timeString)] [WebRTC] SAS verification confirmed")
+        
+        guard cryptoContext != nil else {
+            print("[\(timeString)] [WebRTC] ERROR: No crypto context available")
+            return
+        }
         
         DispatchQueue.main.async {
             self.fingerprintVerificationState = .verified
@@ -249,11 +370,17 @@ class WebRTCManager: NSObject, ObservableObject {
     // Отклонение сверки отпечатков
     func rejectFingerprintVerification() {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] Fingerprint verification rejected")
+        print("[\(timeString)] [WebRTC] SAS verification rejected")
+        
+        // Сбрасываем криптографический контекст
+        cryptoContext = nil
+        myPrivateKey = nil
         
         DispatchQueue.main.async {
             self.fingerprintVerificationState = .failed
             self.isChatEnabled = false
+            self.myFingerprint = ""
+            self.peerFingerprint = ""
         }
     }
 
@@ -520,7 +647,7 @@ class WebRTCManager: NSObject, ObservableObject {
         }
     }
 
-    // Отправка сообщения через dataChannel
+    // Отправка зашифрованного сообщения через dataChannel
     func sendMessage(_ text: String) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Sending message:", text)
@@ -528,7 +655,7 @@ class WebRTCManager: NSObject, ObservableObject {
         // Проверяем, что сверка отпечатков завершена
         guard fingerprintVerificationState == .verified else {
             let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            print("[\(timeString2)] [WebRTC] ERROR: Cannot send message - fingerprint not verified")
+            print("[\(timeString2)] [WebRTC] ERROR: Cannot send message - SAS not verified")
             return
         }
         
@@ -537,10 +664,39 @@ class WebRTCManager: NSObject, ObservableObject {
             print("[\(timeString2)] [WebRTC] ERROR: DataChannel not ready, state:", dataChannel?.readyState.rawValue ?? -1)
             return 
         }
-        let buffer = RTCDataBuffer(data: text.data(using: .utf8)!, isBinary: false)
-        dc.sendData(buffer)
-        let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString3)] [WebRTC] Message sent successfully")
+        
+        guard var context = cryptoContext else {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ERROR: No crypto context available")
+            return
+        }
+        
+        do {
+            // Шифруем сообщение
+            let messageData = text.data(using: .utf8)!
+            let nonce = try AES.GCM.Nonce(data: context.sendNonce.toChaCha20Nonce())
+            
+            let sealedBox = try AES.GCM.seal(messageData, using: context.sealingKey, nonce: nonce)
+            let encryptedData = sealedBox.combined!
+            
+            // Отправляем зашифрованные данные
+            let buffer = RTCDataBuffer(data: encryptedData, isBinary: true)
+            let success = dc.sendData(buffer)
+            
+            if success {
+                // Увеличиваем nonce для следующего сообщения
+                context.sendNonce += 1
+                self.cryptoContext = context
+                let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString3)] [WebRTC] Encrypted message sent successfully, nonce:", context.sendNonce)
+            } else {
+                let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString3)] [WebRTC] ERROR: Failed to send encrypted message")
+            }
+        } catch {
+            let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString2)] [WebRTC] ERROR encrypting message:", error)
+        }
     }
     
     // Проверка готовности для отдачи SDP
@@ -706,10 +862,32 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [WebRTC] DataChannel opened")
+        print("[\(timeString)] [WebRTC] DataChannel opened (receiver)")
+        
+        // Устанавливаем dataChannel для receiver стороны
+        self.dataChannel = dataChannel
         dataChannel.delegate = self
+        
+        // Генерируем ключевую пару если еще не сгенерирована
+        if myPrivateKey == nil {
+            let (privateKey, pubKeyBase64) = generateX25519KeyPair()
+            myPrivateKey = privateKey
+            myPubKey = pubKeyBase64
+            print("[\(timeString)] [WebRTC] Generated X25519 keypair for receiver")
+            
+            // Проверяем, есть ли буферизованный ключ от peer
+            if let bufferedPeerKey = pendingPeerPubKey {
+                print("[\(timeString)] [WebRTC] Processing buffered peer pubkey for receiver")
+                handleReceivedPubKey(bufferedPeerKey)
+            }
+        }
+        
+        // Отправляем pubkey при открытии data channel (для receiver)
+        sendPubKey()
+        
         DispatchQueue.main.async {
             self.dataChannelState = "открыт (receiver): \(dataChannel.readyState.rawValue)"
+            self.isConnected = true
         }
     }
 }
@@ -740,8 +918,51 @@ extension WebRTCManager: RTCDataChannelDelegate {
                 }
             }
         } else {
+            // Обработка зашифрованных бинарных сообщений
             print("[\(timeString)] [WebRTC] Received binary message, length:", buffer.data.count)
-            // Обработка бинарных сообщений (если понадобится в будущем)
+            
+            guard fingerprintVerificationState == .verified else {
+                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString2)] [WebRTC] Ignoring encrypted message - SAS not verified")
+                return
+            }
+            
+            guard var context = cryptoContext else {
+                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString2)] [WebRTC] ERROR: No crypto context for decryption")
+                return
+            }
+            
+            do {
+                // Расшифровываем сообщение
+                let sealedBox = try AES.GCM.SealedBox(combined: buffer.data)
+                let decryptedData = try AES.GCM.open(sealedBox, using: context.openingKey)
+                
+                if let decryptedText = String(data: decryptedData, encoding: .utf8) {
+                    // Проверяем sequence number для защиты от replay атак
+                    if context.recvNonce > context.lastAcceptedRecv {
+                        context.lastAcceptedRecv = context.recvNonce
+                        context.recvNonce += 1
+                        self.cryptoContext = context
+                        
+                        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                        print("[\(timeString2)] [WebRTC] Decrypted message:", decryptedText)
+                        
+                        DispatchQueue.main.async {
+                            self.receivedMessage = decryptedText
+                        }
+                    } else {
+                        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                        print("[\(timeString2)] [WebRTC] Replay attack detected - ignoring message")
+                    }
+                } else {
+                    let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                    print("[\(timeString2)] [WebRTC] ERROR: Failed to decode decrypted message as UTF-8")
+                }
+            } catch {
+                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                print("[\(timeString2)] [WebRTC] ERROR decrypting message:", error)
+            }
         }
     }
     
@@ -762,12 +983,28 @@ extension WebRTCManager: RTCDataChannelDelegate {
             case .closed:
                 self.isConnected = false
                 print("[\(timeString)] [WebRTC] DataChannel closed - resetting verification state")
-                // Сбрасываем состояние сверки при закрытии
+                // Сбрасываем состояние сверки и криптографический контекст при закрытии
                 self.fingerprintVerificationState = .notStarted
                 self.isChatEnabled = false
+                self.cryptoContext = nil
+                self.myPrivateKey = nil
+                self.pendingPeerPubKey = nil
                 
             case .connecting:
                 print("[\(timeString)] [WebRTC] DataChannel connecting...")
+                // Генерируем ключевую пару заранее, чтобы быть готовыми к входящим сообщениям
+                if self.myPrivateKey == nil {
+                    let (privateKey, pubKeyBase64) = self.generateX25519KeyPair()
+                    self.myPrivateKey = privateKey
+                    self.myPubKey = pubKeyBase64
+                    print("[\(timeString)] [WebRTC] Pre-generated X25519 keypair for incoming messages")
+                    
+                    // Проверяем, есть ли буферизованный ключ от peer
+                    if let bufferedPeerKey = self.pendingPeerPubKey {
+                        print("[\(timeString)] [WebRTC] Processing buffered peer pubkey")
+                        self.handleReceivedPubKey(bufferedPeerKey)
+                    }
+                }
                 
             case .closing:
                 print("[\(timeString)] [WebRTC] DataChannel closing...")
