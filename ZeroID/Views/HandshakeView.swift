@@ -14,6 +14,8 @@ struct HandshakeView: View {
     let isLoading: Bool
     
     @State private var showShareSheet = false
+    @State private var showShareOptions = false
+    @State private var shareItems: [Any] = []
 
     var body: some View {
         VStack {
@@ -55,7 +57,7 @@ struct HandshakeView: View {
                     SecondaryButton(
                         title: "Поделиться",
                         icon: "square.and.arrow.up",
-                        action: { showShareSheet = true }
+                        action: { showShareOptions = true }
                     )
                 }
                 .padding(.bottom, 14)
@@ -84,28 +86,10 @@ struct HandshakeView: View {
                 .padding(.top, 8)
             }
             
-            // Раздел с будущими способами передачи
-            if shouldShowCopyField() {
-                VStack(spacing: 12) {
-                    Text("Скоро будут поддерживаться:")
-                        .font(.caption)
-                        .foregroundColor(Color.textSecondary)
-                    
-                    HStack(spacing: 16) {
-                        FutureTransferButton(
-                            icon: "qrcode",
-                            title: "QR-код",
-                            isEnabled: false
-                        )
-                        
-                        FutureTransferButton(
-                            icon: "airplayaudio",
-                            title: "Airdrop",
-                            isEnabled: false
-                        )
-                    }
-                }
-                .padding(.top, 20)
+            // Раздел: быстрый обмен (QR, AirDrop, Галерея)
+            if shouldShowCopyField() || shouldShowPasteField() {
+                QuickShareSection(step: step, sdpText: sdpText, remoteSDP: $remoteSDP, onPaste: onPaste)
+                    .padding(.top, 20)
             }
 
             Spacer()
@@ -115,7 +99,25 @@ struct HandshakeView: View {
         .background(Color.background)
         .navigationBarHidden(true)
         .sheet(isPresented: $showShareSheet) {
-            ActivityView(activityItems: [sdpText])
+            ActivityView(activityItems: shareItems)
+        }
+        .confirmationDialog("Поделиться", isPresented: $showShareOptions, titleVisibility: .visible) {
+            Button("Текст") {
+                // Отправляем только текст оффера/ансвера
+                shareItems = [sdpText]
+                showShareSheet = true
+            }
+            Button("QR-картинка") {
+                // Генерируем QR и делимся картинкой
+                if let img = QRUtils.generateQR(from: sdpText) {
+                    shareItems = [img]
+                    showShareSheet = true
+                } else {
+                    shareItems = [sdpText]
+                    showShareSheet = true
+                }
+            }
+            Button("Отмена", role: .cancel) {}
         }
     }
     
