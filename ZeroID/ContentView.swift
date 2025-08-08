@@ -21,6 +21,7 @@ enum Screen {
     case choice
     case handshakeOffer
     case handshakeAnswer
+    case fingerprintVerification
     case chat
     case settings
     case error(String)
@@ -127,13 +128,8 @@ struct ContentView: View {
                         },
                         onGenerateAnswer: nil,
                         onContinue: {
-                            isLoading = true
+                            // Принимаем answer и ЖДЁМ события .verificationRequired для перехода
                             vm.webrtc.receiveAnswer(remoteSDP)
-                            connectionState = .connected
-                            isLoading = false
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                screen = .chat
-                            }
                         },
                         onBack: { 
                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -189,9 +185,7 @@ struct ContentView: View {
                             }
                         },
                         onContinue: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                screen = .chat
-                            }
+                            // ЖДЁМ события .verificationRequired от WebRTCManager
                         },
                         onBack: { 
                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -236,6 +230,17 @@ struct ContentView: View {
                             }
                     )
                     
+                case .fingerprintVerification:
+                    FingerprintVerificationView(
+                        webRTCManager: vm.webrtc,
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screen = .welcome
+                            }
+                            resetState()
+                        }
+                    )
+                    
                 case .error(let error):
                     ErrorView(
                         error: error,
@@ -259,6 +264,23 @@ struct ContentView: View {
                 connectionState = .connected
             }
         }
+        .onReceive(vm.webrtc.$fingerprintVerificationState) { state in
+            print("[ContentView] Fingerprint verification state changed to:", state)
+            switch state {
+            case .verificationRequired:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    screen = .fingerprintVerification
+                }
+            case .verified:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    screen = .chat
+                }
+            case .failed:
+                showToast(message: "Сверка отпечатков не удалась")
+            default:
+                break
+            }
+        }
     }
     
     // MARK: - Private Methods
@@ -276,6 +298,10 @@ struct ContentView: View {
     }
     
     private func resetState() {
+        // Очищаем историю сообщений и сбрасываем WebRTC соединение
+        vm.clearMessages()
+        vm.webrtc.resetConnection()
+
         remoteSDP = ""
         mySDP = ""
         isLoading = false

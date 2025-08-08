@@ -14,6 +14,8 @@ struct HandshakeView: View {
     let isLoading: Bool
     
     @State private var showShareSheet = false
+    @State private var showShareOptions = false
+    @State private var shareItems: [Any] = []
 
     var body: some View {
         VStack {
@@ -55,7 +57,7 @@ struct HandshakeView: View {
                     SecondaryButton(
                         title: "Поделиться",
                         icon: "square.and.arrow.up",
-                        action: { showShareSheet = true }
+                        action: { showShareOptions = true }
                     )
                 }
                 .padding(.bottom, 14)
@@ -71,10 +73,7 @@ struct HandshakeView: View {
                 .padding(.bottom, 14)
             }
             
-            if isLoading {
-                LoaderView(text: "Подключение...")
-                    .background(Color.black.opacity(0.05).ignoresSafeArea())
-            }
+            // Убираем локальный лоадер, чтобы не дублировать глобальный оверлей
             
             // Кнопки действий в зависимости от состояния
             if let buttonConfig = getButtonConfig() {
@@ -87,28 +86,10 @@ struct HandshakeView: View {
                 .padding(.top, 8)
             }
             
-            // Раздел с будущими способами передачи
-            if shouldShowCopyField() {
-                VStack(spacing: 12) {
-                    Text("Скоро будут поддерживаться:")
-                        .font(.caption)
-                        .foregroundColor(Color.textSecondary)
-                    
-                    HStack(spacing: 16) {
-                        FutureTransferButton(
-                            icon: "qrcode",
-                            title: "QR-код",
-                            isEnabled: false
-                        )
-                        
-                        FutureTransferButton(
-                            icon: "airplayaudio",
-                            title: "Airdrop",
-                            isEnabled: false
-                        )
-                    }
-                }
-                .padding(.top, 20)
+            // Раздел: быстрый обмен (QR, AirDrop, Галерея)
+            if shouldShowCopyField() || shouldShowPasteField() {
+                QuickShareSection(step: step, sdpText: sdpText, remoteSDP: $remoteSDP, onPaste: onPaste)
+                    .padding(.top, 20)
             }
 
             Spacer()
@@ -118,7 +99,25 @@ struct HandshakeView: View {
         .background(Color.background)
         .navigationBarHidden(true)
         .sheet(isPresented: $showShareSheet) {
-            ActivityView(activityItems: [sdpText])
+            ActivityView(activityItems: shareItems)
+        }
+        .confirmationDialog("Поделиться", isPresented: $showShareOptions, titleVisibility: .visible) {
+            Button("Текст") {
+                // Отправляем только текст оффера/ансвера
+                shareItems = [sdpText]
+                showShareSheet = true
+            }
+            Button("QR-картинка") {
+                // Генерируем QR и делимся картинкой
+                if let img = QRUtils.generateQR(from: sdpText) {
+                    shareItems = [img]
+                    showShareSheet = true
+                } else {
+                    shareItems = [sdpText]
+                    showShareSheet = true
+                }
+            }
+            Button("Отмена", role: .cancel) {}
         }
     }
     
@@ -132,7 +131,7 @@ struct HandshakeView: View {
                 case .offerGenerated:
                     return "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
                 case .waitingForAnswer:
-                    return "Answer вставлен. Нажми 'Подтвердить' для перехода в чат."
+                    return "Answer вставлен. Нажми 'Подтвердить' для продолжения."
                 }
             }
             return "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
@@ -143,7 +142,7 @@ struct HandshakeView: View {
                 case .waitingOffer:
                     return "Вставь Offer от peer-а и сгенерируй Answer."
                 case .answerGenerated:
-                    return "Answer сгенерирован. Скопируй и отправь peer-у.\nЗатем нажми 'Перейти к чату'."
+                    return "Answer сгенерирован. Скопируй и отправь peer-у.\nЗатем нажми 'Продолжить'."
                 }
             }
             return "Вставь Offer от peer-а и сгенерируй Answer."
@@ -158,7 +157,8 @@ struct HandshakeView: View {
                 case .offerGenerated:
                     return true
                 case .waitingForAnswer:
-                    return false
+                    // Не скрываем поле оффера после вставки ответа — убираем дергание UI
+                    return true
                 }
             }
             return false
@@ -230,7 +230,7 @@ struct HandshakeView: View {
                 case .waitingOffer:
                     return ("Сгенерировать Answer", onGenerateAnswer ?? {}, isLoading || remoteSDP.isEmpty)
                 case .answerGenerated:
-                    return ("Перейти к чату", onContinue, isLoading)
+                    return ("Продолжить", onContinue, isLoading)
                 }
             }
             return ("Сгенерировать Answer", onGenerateAnswer ?? {}, isLoading || remoteSDP.isEmpty)

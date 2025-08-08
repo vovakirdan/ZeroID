@@ -2,7 +2,11 @@ import SwiftUI
 
 struct SettingsView: View {
     let onBack: () -> Void
-    
+    @State private var stunUrl: String = UserDefaults.standard.string(forKey: "stun_url") ?? "stun:stun.l.google.com:19302"
+    @State private var turnUrl: String = UserDefaults.standard.string(forKey: "turn_url") ?? ""
+    @State private var turnUsername: String = UserDefaults.standard.string(forKey: "turn_user") ?? ""
+    @State private var turnCredential: String = UserDefaults.standard.string(forKey: "turn_cred") ?? ""
+
     var body: some View {
         VStack(spacing: 0) {
             // Apple-style заголовок с кнопкой назад
@@ -47,23 +51,52 @@ struct SettingsView: View {
                 }
                 
                 Section("Соединение") {
-                    HStack {
-                        Image(systemName: "network")
-                            .foregroundColor(.orange)
-                        Text("STUN сервер")
-                        Spacer()
-                        Text("stun:stun.l.google.com:19302")
-                            .foregroundColor(Color.textSecondary)
-                            .font(.caption)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "network")
+                                .foregroundColor(.orange)
+                            Text("STUN URL")
+                            Spacer()
+                        }
+                        TextField("stun:host:port", text: $stunUrl)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
                     }
-                    
-                    HStack {
-                        Image(systemName: "shield")
-                            .foregroundColor(.purple)
-                        Text("TURN сервер")
-                        Spacer()
-                        Text("Не настроен")
-                            .foregroundColor(Color.textSecondary)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "shield")
+                                .foregroundColor(.purple)
+                            Text("TURN URL")
+                            Spacer()
+                        }
+                        TextField("turn:host:port", text: $turnUrl)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+
+                        TextField("TURN username", text: $turnUsername)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                        SecureField("TURN credential", text: $turnCredential)
+                    }
+
+                    Button("Сохранить и применить") {
+                        // Сохраняем значения в UserDefaults
+                        UserDefaults.standard.set(stunUrl, forKey: "stun_url")
+                        UserDefaults.standard.set(turnUrl, forKey: "turn_url")
+                        UserDefaults.standard.set(turnUsername, forKey: "turn_user")
+                        UserDefaults.standard.set(turnCredential, forKey: "turn_cred")
+
+                        // Конвертируем в структуру WebRTCManager.UserIceServer и сохраняем
+                        var servers: [WebRTCManager.UserIceServer] = []
+                        if !stunUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            servers.append(.init(urls: [stunUrl], username: nil, credential: nil))
+                        }
+                        if !turnUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            servers.append(.init(urls: [turnUrl], username: turnUsername.isEmpty ? nil : turnUsername, credential: turnCredential.isEmpty ? nil : turnCredential))
+                        }
+                        let mgr = WebRTCManager()
+                        mgr.saveIceServers(servers)
                     }
                 }
                 

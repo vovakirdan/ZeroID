@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		33BE362C2E2CF19F002F7788 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 33BE362B2E2CF19F002F7788 /* WebRTC */; };
 		33BE362F2E2CF2F3002F7788 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 33BE362E2E2CF2F3002F7788 /* WebRTC */; };
+		33F2F06A2E40C87B00EF08BC /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 33F2F0692E40C87B00EF08BC /* SWCompression */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				33F2F06A2E40C87B00EF08BC /* SWCompression in Frameworks */,
 				33BE362C2E2CF19F002F7788 /* WebRTC in Frameworks */,
 				33BE362F2E2CF2F3002F7788 /* WebRTC in Frameworks */,
 			);
@@ -109,6 +111,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				33BE362A2E2CF19F002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */,
+				33F2F0682E40C87B00EF08BC /* XCRemoteSwiftPackageReference "SWCompression" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3313453C2E2BB43F00307BD4 /* Products */;
@@ -271,6 +274,9 @@
 				DEVELOPMENT_TEAM = U778KC976T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save QR image to your Photo Library";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Access to your Photo Library is needed to pick QR codes";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to scan QR codes";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -300,6 +306,9 @@
 				DEVELOPMENT_TEAM = U778KC976T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save QR image to your Photo Library";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Access to your Photo Library is needed to pick QR codes";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to scan QR codes";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -350,6 +359,14 @@
 				minimumVersion = 138.0.0;
 			};
 		};
+		33F2F0682E40C87B00EF08BC /* XCRemoteSwiftPackageReference "SWCompression" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tsolomko/SWCompression.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.8.6;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -362,6 +379,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 33BE362A2E2CF19F002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		33F2F0692E40C87B00EF08BC /* SWCompression */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 33F2F0682E40C87B00EF08BC /* XCRemoteSwiftPackageReference "SWCompression" */;
+			productName = SWCompression;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
