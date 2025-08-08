@@ -51,16 +51,39 @@ class WebRTCManager: NSObject, ObservableObject {
     private var gatherStartTime: Date?
     private var hasRelayCandidate: Bool = false
     private var internalCandidateCount: Int = 0
-    private let iceServers = [
-        RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
-        RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"]),
-        RTCIceServer(urlStrings: ["stun:stun2.l.google.com:19302"]),
-        RTCIceServer(urlStrings: ["stun:stun3.l.google.com:19302"]),
-        RTCIceServer(urlStrings: ["stun:stun4.l.google.com:19302"]),
-        RTCIceServer(urlStrings: ["turn:relay1.expressturn.com:3480"],
-                     username: "000000002067703673",
-                     credential: "aUS5WkBI4dk568G6L/uv7ZQvBAQ=")
-    ]
+    // Настраиваемые ICE сервера (перекрываются пользовательскими из UserDefaults)
+    private var iceServers: [RTCIceServer] {
+        let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: "user_ice_servers"),
+           let servers = try? JSONDecoder().decode([UserIceServer].self, from: data) {
+            return servers.map { $0.toRTCIceServer() }
+        }
+        // дефолты
+        return [
+            RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"]),
+            RTCIceServer(urlStrings: ["stun:stun1.l.google.com:19302"]),
+            RTCIceServer(urlStrings: ["stun:stun2.l.google.com:19302"]),
+            RTCIceServer(urlStrings: ["stun:stun3.l.google.com:19302"]),
+            RTCIceServer(urlStrings: ["stun:stun4.l.google.com:19302"])
+        ]
+    }
+
+    struct UserIceServer: Codable {
+        let urls: [String]
+        let username: String?
+        let credential: String?
+
+        func toRTCIceServer() -> RTCIceServer {
+            RTCIceServer(urlStrings: urls, username: username ?? "", credential: credential ?? "")
+        }
+    }
+
+    // Публичный API для сохранения ICE серверов
+    func saveIceServers(_ servers: [UserIceServer]) {
+        if let data = try? JSONEncoder().encode(servers) {
+            UserDefaults.standard.set(data, forKey: "user_ice_servers")
+        }
+    }
 
     // Сбор ICE-кандидатов для ConnectionBundle
     private var collectedIceCandidates: [IceCandidate] = []
@@ -248,7 +271,7 @@ class WebRTCManager: NSObject, ObservableObject {
         
         // Генерируем X25519 ключевую пару если еще не сгенерирована
         let pubKeyBase64: String
-        if let existingPrivateKey = myPrivateKey {
+        if myPrivateKey != nil {
             // Используем уже сгенерированный ключ
             pubKeyBase64 = myPubKey
             print("[\(timeString)] [WebRTC] Using existing X25519 keypair")
@@ -865,7 +888,7 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
                 self.isConnected = true
             case .disconnected, .failed, .closed, .new, .checking:
                 self.isConnected = false
-            @unknown default:
+            default:
                 self.isConnected = false
             }
         }

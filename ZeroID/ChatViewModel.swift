@@ -10,6 +10,8 @@ class ChatViewModel: ObservableObject {
     let webrtc = WebRTCManager()
     
     private var cancellables = Set<AnyCancellable>()
+    private var disconnectCleanupWorkItem: DispatchWorkItem?
+    private var finalDisconnect: Bool = false
 
     init() {
         webrtc.$receivedMessage
@@ -28,7 +30,12 @@ class ChatViewModel: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] connected in
                 guard let self else { return }
-                if !connected {
+                if connected {
+                    // Отмена таймера очистки при восстановлении
+                    self.disconnectCleanupWorkItem?.cancel()
+                    self.disconnectCleanupWorkItem = nil
+                    self.finalDisconnect = false
+                } else {
                     // Запускаем таймер ожидания восстановления соединения
                     self.scheduleDisconnectCleanup()
                 }
@@ -53,15 +60,20 @@ class ChatViewModel: ObservableObject {
     // План очистки при дисконнекте, если не восстановились за 10 сек
     private func scheduleDisconnectCleanup() {
         let graceSeconds: Double = 10
-        let currentConnectionSnapshot = webrtc.isConnected
-        DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds) { [weak self] in
+        // Если уже запущен таймер — не создаем новый
+        if disconnectCleanupWorkItem != nil { return }
+
+        let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            // Если за время ожидания соединение не восстановилось — чистим историю
-            if !self.webrtc.isConnected && !currentConnectionSnapshot {
-                print("[ChatViewModel] Connection not restored for \(graceSeconds)s — clearing messages")
+            print("[ChatViewModel] Disconnect grace timer fired, isConnected=\(self.webrtc.isConnected), finalDisconnect=\(self.finalDisconnect)")
+            if !self.webrtc.isConnected && !self.finalDisconnect {
                 self.messages.removeAll()
+                self.finalDisconnect = true
             }
+            self.disconnectCleanupWorkItem = nil
         }
+        disconnectCleanupWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds, execute: work)
     }
 }
 
