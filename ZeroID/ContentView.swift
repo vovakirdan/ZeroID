@@ -128,9 +128,8 @@ struct ContentView: View {
                         },
                         onGenerateAnswer: nil,
                         onContinue: {
-                            // Принимаем answer и переходим на экран сверки отпечатков
+                            // Принимаем answer и ЖДЁМ события .verificationRequired для перехода
                             vm.webrtc.receiveAnswer(remoteSDP)
-                            withAnimation(.easeInOut(duration: 0.3)) { screen = .fingerprintVerification }
                         },
                         onBack: { 
                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -186,8 +185,7 @@ struct ContentView: View {
                             }
                         },
                         onContinue: {
-                            // Явно переходим к сверке, чтобы пользователь видел SAS
-                            withAnimation(.easeInOut(duration: 0.3)) { screen = .fingerprintVerification }
+                            // ЖДЁМ события .verificationRequired от WebRTCManager
                         },
                         onBack: { 
                             withAnimation(.easeInOut(duration: 0.3)) {
