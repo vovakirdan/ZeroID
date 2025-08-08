@@ -298,6 +298,10 @@ struct ContentView: View {
     }
     
     private func resetState() {
+        // Очищаем историю сообщений и сбрасываем WebRTC соединение
+        vm.clearMessages()
+        vm.webrtc.resetConnection()
+
         remoteSDP = ""
         mySDP = ""
         isLoading = false

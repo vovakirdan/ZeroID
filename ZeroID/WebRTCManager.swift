@@ -100,6 +100,51 @@ class WebRTCManager: NSObject, ObservableObject {
         super.init()
     }
 
+    // Явный сброс и закрытие соединения
+    func resetConnection() {
+        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(timeString)] [WebRTC] Reset connection invoked")
+
+        // Закрываем канал данных
+        if let dc = dataChannel {
+            dc.close()
+        }
+        dataChannel = nil
+
+        // Закрываем peer connection
+        if let pc = peerConnection {
+            pc.close()
+        }
+        peerConnection = nil
+
+        // Сбрасываем крипто и служебные состояния
+        myPrivateKey = nil
+        cryptoContext = nil
+        pendingPeerPubKey = nil
+        offerCompletion = nil
+        answerCompletion = nil
+        gatherStartTime = nil
+        hasRelayCandidate = false
+        internalCandidateCount = 0
+        collectedIceCandidates.removeAll()
+        currentConnectionId = nil
+
+        DispatchQueue.main.async {
+            self.fingerprintVerificationState = .notStarted
+            self.myPubKey = ""
+            self.peerPubKey = ""
+            self.myFingerprint = ""
+            self.peerFingerprint = ""
+            self.sasCode = ""
+            self.isChatEnabled = false
+            self.isConnected = false
+            self.dataChannelState = "не создан"
+            self.iceConnectionState = "не создан"
+            self.iceGatheringState = "не создан"
+            self.candidateCount = "0"
+        }
+    }
+
     // Создание peerConnection
     func createPeerConnection() -> RTCPeerConnection {
         print("[WebRTC] Creating peerConnection")

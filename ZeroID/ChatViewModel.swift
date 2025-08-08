@@ -21,6 +21,18 @@ class ChatViewModel: ObservableObject {
                 self?.messages.append(Message(text: text, isMine: false, date: Date()))
             }
             .store(in: &cancellables)
+
+        // Очистка сообщений при отключении/сбросе соединения
+        webrtc.$isConnected
+            .removeDuplicates()
+            .sink { [weak self] connected in
+                guard let self else { return }
+                if !connected {
+                    // Запускаем таймер ожидания восстановления соединения
+                    self.scheduleDisconnectCleanup()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func sendMessage() {
@@ -30,6 +42,25 @@ class ChatViewModel: ObservableObject {
         webrtc.sendMessage(inputText)
         messages.append(Message(text: inputText, isMine: true, date: Date()))
         inputText = ""
+    }
+
+    // Явная очистка истории (при выходе из диалога)
+    func clearMessages() {
+        messages.removeAll()
+    }
+
+    // План очистки при дисконнекте, если не восстановились за 10 сек
+    private func scheduleDisconnectCleanup() {
+        let graceSeconds: Double = 10
+        let currentConnectionSnapshot = webrtc.isConnected
+        DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds) { [weak self] in
+            guard let self else { return }
+            // Если за время ожидания соединение не восстановилось — чистим историю
+            if !self.webrtc.isConnected && !currentConnectionSnapshot {
+                print("[ChatViewModel] Connection not restored for \(graceSeconds)s — clearing messages")
+                self.messages.removeAll()
+            }
+        }
     }
 }
 
