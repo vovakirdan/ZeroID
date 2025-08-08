@@ -329,7 +329,7 @@ struct ChatView: View {
             HStack(spacing: 6) {
                 Circle()
                     .fill(vm.webrtc.isConnected ? Color.green : Color.orange)
-                    .frame(width: 8, height: 8)
+                    .frame(width: 8, height: 80)
                 Text(vm.webrtc.isConnected ? (vm.webrtc.isChatEnabled ? "Соединение активно" : "Ждём подтверждения отпечатков") : "Нет соединения")
                     .font(.caption2)
                     .foregroundColor(.white)
@@ -390,7 +390,8 @@ struct RoundedCorner: Shape {
     ]
     
     // Устанавливаем состояние соединения для отображения чата
-    mockVM.webrtc.isConnected = true
+    mockVM.webrtc.isConnected = true // false - показать лоадер соединения
+    mockVM.webrtc.isChatEnabled = true  // false - показать лоадер сверки отпечатков
 
     return ChatView(
         vm: mockVM,
