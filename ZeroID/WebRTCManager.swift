@@ -859,6 +859,15 @@ extension WebRTCManager: RTCPeerConnectionDelegate {
         print("[\(timeString)] [WebRTC] ICE connection state changed:", newState.rawValue)
         DispatchQueue.main.async {
             self.iceConnectionState = "\(newState.rawValue)"
+            // Отражаем здоровье транспорта в isConnected, чтобы UI и очистка реагировали корректно
+            switch newState {
+            case .connected, .completed:
+                self.isConnected = true
+            case .disconnected, .failed, .closed, .new, .checking:
+                self.isConnected = false
+            @unknown default:
+                self.isConnected = false
+            }
         }
     }
     

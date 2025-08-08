@@ -23,6 +23,7 @@ class ChatViewModel: ObservableObject {
             .store(in: &cancellables)
 
         // Очистка сообщений при отключении/сбросе соединения
+        // Реагируем и на изменение состояния ICE, чтобы поймать случаи убийства приложения на другой стороне
         webrtc.$isConnected
             .removeDuplicates()
             .sink { [weak self] connected in

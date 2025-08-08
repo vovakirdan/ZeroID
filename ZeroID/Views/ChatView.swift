@@ -14,26 +14,28 @@ struct ChatView: View {
             .ignoresSafeArea(.all)
     }
     
-    // Состояние ожидания соединения
+    // Состояние ожидания соединения (растягиваем на весь экран, центрируем)
     private var waitingConnectionView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             LoaderView(text: "Ждём соединения...")
             Text("⚠️ Ожидание установки соединения...")
                 .foregroundColor(.orange)
                 .font(.caption)
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
     }
     
-    // Состояние ожидания сверки отпечатков
+    // Состояние ожидания сверки отпечатков (на весь экран)
     private var waitingFingerprintView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             LoaderView(text: "Сверка отпечатков...")
             Text("🔐 Ожидание подтверждения отпечатков...")
                 .foregroundColor(.blue)
                 .font(.caption)
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
     }
     
     // Список сообщений
@@ -48,13 +50,15 @@ struct ChatView: View {
                             timestamp: msg.date
                         )
                         .id(msg.id)
+                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                                removal: .opacity.combined(with: .scale)))
                     }
                 }
                 .padding(.vertical, 8)
             }
             .onChange(of: vm.messages.count) { oldCount, newCount in
                 if let lastMessage = vm.messages.last {
-                    withAnimation(.easeOut(duration: 0.3)) {
+                    withAnimation(.easeOut(duration: 0.25)) {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
                     }
                 }
@@ -73,6 +77,7 @@ struct ChatView: View {
                 messagesList
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // Проверка возможности отправки сообщения
@@ -319,6 +324,22 @@ struct ChatView: View {
             }
         )
         .animation(.spring(response: 0.5, dampingFraction: 0.8), value: showConnectionInfo)
+        // Индикатор статуса соединения
+        .overlay(alignment: .top) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(vm.webrtc.isConnected ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                Text(vm.webrtc.isConnected ? (vm.webrtc.isChatEnabled ? "Соединение активно" : "Ждём подтверждения отпечатков") : "Нет соединения")
+                    .font(.caption2)
+                    .foregroundColor(.white)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .background(Color.black.opacity(0.35))
+                    .cornerRadius(12)
+            }
+            .padding(.top, 6)
+        }
     }
 }
 
