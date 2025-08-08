@@ -14,14 +14,12 @@ struct CryptoContext {
     let sas: String
 }
 
-// Расширение для конвертации UInt64 в nonce для ChaCha20Poly1305
+// Расширение: конвертация UInt64 → 12-байтовый nonce (как в Rust: первые 4 байта нули, далее 8 байт big-endian)
 extension UInt64 {
-    func toChaCha20Nonce() -> Data {
-        var nonceData = Data(count: 12)
-        nonceData.withUnsafeMutableBytes { ptr in
-            ptr.storeBytes(of: self.littleEndian, as: UInt64.self)
-        }
-        return nonceData
+    func toChaChaNonceData() -> Data {
+        let be = self.bigEndian
+        let tail = withUnsafeBytes(of: be) { Data($0) } // 8 байт
+        return Data([0,0,0,0]) + tail // всего 12 байт
     }
 }
 
@@ -75,6 +73,8 @@ class WebRTCManager: NSObject, ObservableObject {
     @Published var myFingerprint: String = ""
     @Published var peerFingerprint: String = ""
     @Published var isChatEnabled: Bool = false
+    // SAS-код для отображения пользователю (нижний регистр, 12 hex символов)
+    @Published var sasCode: String = ""
 
     @Published var receivedMessage: String = ""
     @Published var isConnected: Bool = false
@@ -82,6 +82,7 @@ class WebRTCManager: NSObject, ObservableObject {
     @Published var iceConnectionState: String = "не создан"
     @Published var iceGatheringState: String = "не создан"
     @Published var candidateCount: String = "0"
+    private let tagLen: Int = 16 // длина тега Poly1305
 
     override init() {
         print("[WebRTCManager] Init")
@@ -332,22 +333,25 @@ class WebRTCManager: NSObject, ObservableObject {
         let k1 = keyData.prefix(32)
         let k2 = keyData.suffix(32)
         
-        // Детерминированно выбираем ключи на основе сортировки публичных ключей (как в Rust)
-        let (sendKeyData, recvKeyData) = myPubKey < peerPubKey ? (k1, k2) : (k2, k1)
+        // Детерминированно выбираем ключи на основе лексикографического сравнения байтов публичных ключей (как в Rust)
+        let myPubBytes = Data(base64Encoded: myPubKey) ?? Data()
+        let peerPubBytes = Data(base64Encoded: peerPubKey) ?? Data()
+        let (sendKeyData, recvKeyData) = (myPubBytes.lexicographicallyPrecedes(peerPubBytes)) ? (k1, k2) : (k2, k1)
         
         let sealingKey = SymmetricKey(data: sendKeyData)
         let openingKey = SymmetricKey(data: recvKeyData)
         
-        // Генерируем SAS из первого ключа (как в Rust)
+        // Генерируем SAS из первого ключа (как в Rust): sha256(k1) → первые 6 байт → 12 hex НИЖНИМ регистром
         let sasData = SHA256.hash(data: k1)
-        let sasHex = sasData.prefix(6).map { String(format: "%02X", $0) }.joined()
+        let sasHexLower = sasData.prefix(6).map { String(format: "%02x", $0) }.joined()
         
-        print("[\(timeString)] [WebRTC] Created crypto context - SAS:", sasHex)
+        print("[\(timeString)] [WebRTC] Created crypto context - SAS:", sasHexLower)
+        DispatchQueue.main.async { self.sasCode = sasHexLower }
         
         return CryptoContext(
             sealingKey: sealingKey,
             openingKey: openingKey,
-            sas: sasHex
+            sas: sasHexLower
         )
     }
     
@@ -672,12 +676,11 @@ class WebRTCManager: NSObject, ObservableObject {
         }
         
         do {
-            // Шифруем сообщение
+            // Шифруем сообщение ChaCha20-Poly1305 (совместимо с Rust)
             let messageData = text.data(using: .utf8)!
-            let nonce = try AES.GCM.Nonce(data: context.sendNonce.toChaCha20Nonce())
-            
-            let sealedBox = try AES.GCM.seal(messageData, using: context.sealingKey, nonce: nonce)
-            let encryptedData = sealedBox.combined!
+            let nonce = try ChaChaPoly.Nonce(data: context.sendNonce.toChaChaNonceData())
+            let sealedBox = try ChaChaPoly.seal(messageData, using: context.sealingKey, nonce: nonce)
+            let encryptedData = sealedBox.ciphertext + sealedBox.tag // без nonce, как в Rust
             
             // Отправляем зашифрованные данные
             let buffer = RTCDataBuffer(data: encryptedData, isBinary: true)
@@ -934,9 +937,13 @@ extension WebRTCManager: RTCDataChannelDelegate {
             }
             
             do {
-                // Расшифровываем сообщение
-                let sealedBox = try AES.GCM.SealedBox(combined: buffer.data)
-                let decryptedData = try AES.GCM.open(sealedBox, using: context.openingKey)
+                // Расшифровка ChaCha20-Poly1305: входные данные = ciphertext || tag (без nonce)
+                guard buffer.data.count >= tagLen else { return }
+                let ct = buffer.data.dropLast(tagLen)
+                let tag = buffer.data.suffix(tagLen)
+                let nonceData = context.recvNonce.toChaChaNonceData()
+                let sealedBox = try ChaChaPoly.SealedBox(nonce: ChaChaPoly.Nonce(data: nonceData), ciphertext: ct, tag: tag)
+                let decryptedData = try ChaChaPoly.open(sealedBox, using: context.openingKey)
                 
                 if let decryptedText = String(data: decryptedData, encoding: .utf8) {
                     // Проверяем sequence number для защиты от replay атак

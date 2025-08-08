@@ -71,10 +71,7 @@ struct HandshakeView: View {
                 .padding(.bottom, 14)
             }
             
-            if isLoading {
-                LoaderView(text: "Подключение...")
-                    .background(Color.black.opacity(0.05).ignoresSafeArea())
-            }
+            // Убираем локальный лоадер, чтобы не дублировать глобальный оверлей
             
             // Кнопки действий в зависимости от состояния
             if let buttonConfig = getButtonConfig() {
@@ -132,7 +129,7 @@ struct HandshakeView: View {
                 case .offerGenerated:
                     return "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
                 case .waitingForAnswer:
-                    return "Answer вставлен. Нажми 'Подтвердить' для перехода в чат."
+                    return "Answer вставлен. Нажми 'Подтвердить' для продолжения."
                 }
             }
             return "Скопируй и отправь peer-у свой Offer.\nЖди Answer и вставь его ниже."
@@ -143,7 +140,7 @@ struct HandshakeView: View {
                 case .waitingOffer:
                     return "Вставь Offer от peer-а и сгенерируй Answer."
                 case .answerGenerated:
-                    return "Answer сгенерирован. Скопируй и отправь peer-у.\nЗатем нажми 'Перейти к чату'."
+                    return "Answer сгенерирован. Скопируй и отправь peer-у.\nЗатем нажми 'Продолжить'."
                 }
             }
             return "Вставь Offer от peer-а и сгенерируй Answer."
@@ -158,7 +155,8 @@ struct HandshakeView: View {
                 case .offerGenerated:
                     return true
                 case .waitingForAnswer:
-                    return false
+                    // Не скрываем поле оффера после вставки ответа — убираем дергание UI
+                    return true
                 }
             }
             return false
@@ -230,7 +228,7 @@ struct HandshakeView: View {
                 case .waitingOffer:
                     return ("Сгенерировать Answer", onGenerateAnswer ?? {}, isLoading || remoteSDP.isEmpty)
                 case .answerGenerated:
-                    return ("Перейти к чату", onContinue, isLoading)
+                    return ("Продолжить", onContinue, isLoading)
                 }
             }
             return ("Сгенерировать Answer", onGenerateAnswer ?? {}, isLoading || remoteSDP.isEmpty)
