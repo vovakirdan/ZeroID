@@ -117,17 +117,22 @@ struct InputMethodButton: View {
 }
 
 #Preview {
-    @Previewable @State var text = "ррр"
-    
-    return VStack {
-        InputMethodView(
-            label: "Вставь Offer от peer-а:",
-            inputText: $text,
-            onPaste: {}
-        )
-        .padding()
-        
-        Spacer()
+    InputMethodViewPreview()
+}
+
+private struct InputMethodViewPreview: View {
+    @State var text = "ррр"
+    var body: some View {
+        VStack {
+            InputMethodView(
+                label: "Вставь Offer от peer-а:",
+                inputText: $text,
+                onPaste: {}
+            )
+            .padding()
+            
+            Spacer()
+        }
+        .background(Color.background)
     }
-    .background(Color.background)
-} 
+}

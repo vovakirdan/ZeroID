@@ -78,8 +78,8 @@ struct QuickShareSection: View {
             })
             .ignoresSafeArea()
         }
-        .onChange(of: photoItem) { _, newItem in
-            guard let newItem else { return }
+        .onChange(of: photoItem) { newItem in
+            guard let newItem = newItem else { return }
             Task {
                 if let data = try? await newItem.loadTransferable(type: Data.self),
                    let ui = UIImage(data: data) {
