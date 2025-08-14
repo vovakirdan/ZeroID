@@ -24,6 +24,7 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     var onClose: (() -> Void)?
 
     private let captureSession = AVCaptureSession()
+    private let sessionQueue = DispatchQueue(label: "com.zeroid.qrscanner.session")
     private var previewLayer: AVCaptureVideoPreviewLayer?
 
     override func viewDidLoad() {
@@ -55,7 +56,10 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
         view.layer.addSublayer(previewLayer)
         self.previewLayer = previewLayer
 
-        captureSession.startRunning()
+        // Стартуем сессию на фоновой очереди, чтобы не блокировать UI
+        sessionQueue.async { [weak self] in
+            self?.captureSession.startRunning()
+        }
     }
 
     private func setupOverlay() {
@@ -91,8 +95,13 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
     }
 
     @objc private func closeTapped() {
-        captureSession.stopRunning()
-        onClose?()
+        // Останов сессии — тоже на фоне, коллбек на главной
+        sessionQueue.async { [weak self] in
+            self?.captureSession.stopRunning()
+            DispatchQueue.main.async {
+                self?.onClose?()
+            }
+        }
     }
 
     // MARK: - AVCaptureMetadataOutputObjectsDelegate
@@ -102,9 +111,13 @@ final class QRScannerViewController: UIViewController, AVCaptureMetadataOutputOb
         guard let obj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
               obj.type == .qr,
               let string = obj.stringValue else { return }
-        // Останавливаем один раз и возвращаем код
-        captureSession.stopRunning()
-        onCode?(string)
+        // Останавливаем один раз на фоне и возвращаем код на главной
+        sessionQueue.async { [weak self] in
+            self?.captureSession.stopRunning()
+            DispatchQueue.main.async {
+                self?.onCode?(string)
+            }
+        }
     }
 }
 

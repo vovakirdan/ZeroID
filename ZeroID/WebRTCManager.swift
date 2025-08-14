@@ -3,6 +3,7 @@
 import Foundation
 import WebRTC
 import CryptoKit
+import Security
 
 // Криптографический контекст для шифрования сообщений
 struct CryptoContext {
@@ -85,9 +86,139 @@ class WebRTCManager: NSObject, ObservableObject {
         }
     }
 
+    // Публичный API для чтения сохраненных ICE серверов
+    func loadUserIceServers() -> [UserIceServer] {
+        if let data = UserDefaults.standard.data(forKey: "user_ice_servers"),
+           let servers = try? JSONDecoder().decode([UserIceServer].self, from: data) {
+            return servers
+        }
+        return []
+    }
+
+    // Результат валидации сервера
+    struct IceServerValidationResult {
+        let url: String
+        let isTurn: Bool
+        let reachable: Bool
+        let reason: String?
+    }
+
+    // Проверка доступности списка ICE серверов: для STUN ждём srflx, для TURN ждём relay
+    func validateIceServers(_ servers: [UserIceServer], timeout: TimeInterval = 3.0, completion: @escaping ([IceServerValidationResult]) -> Void) {
+        // Разворачиваем в плоский список по каждой url
+        var items: [(url: String, username: String?, credential: String?)] = []
+        for s in servers {
+            for u in s.urls {
+                items.append((u, s.username, s.credential))
+            }
+        }
+        if items.isEmpty {
+            completion([])
+            return
+        }
+
+        let group = DispatchGroup()
+        var results: [IceServerValidationResult] = Array(repeating: IceServerValidationResult(url: "", isTurn: false, reachable: false, reason: nil), count: items.count)
+        for (index, item) in items.enumerated() {
+            group.enter()
+            self.validateSingleIceServer(url: item.url, username: item.username, credential: item.credential, timeout: timeout) { result in
+                results[index] = result
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            completion(results)
+        }
+    }
+
+    // Валидация одного ICE сервера: создаём отдельный peer connection с одним сервером
+    private func validateSingleIceServer(url: String, username: String?, credential: String?, timeout: TimeInterval, completion: @escaping (IceServerValidationResult) -> Void) {
+        let isTurn = url.lowercased().hasPrefix("turn:") || url.lowercased().hasPrefix("turns:") || (username != nil)
+
+        let cfg = RTCConfiguration()
+        let rtcServer = RTCIceServer(urlStrings: [url], username: username ?? "", credential: credential ?? "")
+        cfg.iceServers = [rtcServer]
+        cfg.continualGatheringPolicy = .gatherOnce
+        let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
+
+        // Локальный делегат только для этой проверки
+        class ValidationDelegate: NSObject, RTCPeerConnectionDelegate {
+            let isTurn: Bool
+            let onCandidate: (RTCIceCandidate) -> Void
+            init(isTurn: Bool, onCandidate: @escaping (RTCIceCandidate) -> Void) {
+                self.isTurn = isTurn
+                self.onCandidate = onCandidate
+            }
+            func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
+                onCandidate(candidate)
+            }
+            func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
+            func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}
+            func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
+            func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {}
+            func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
+            func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
+            func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
+            func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
+        }
+
+        var foundExpectedCandidate = false
+        let delegate = ValidationDelegate(isTurn: isTurn) { cand in
+            // Проверяем строку sdp на тип кандидата
+            let sdp = cand.sdp.lowercased()
+            if isTurn {
+                // TURN должен дать relay
+                if sdp.contains(" typ relay ") || sdp.contains(" typ relay\n") || sdp.contains(" typ relay") {
+                    foundExpectedCandidate = true
+                }
+            } else {
+                // STUN обычно даёт srflx
+                if sdp.contains(" typ srflx ") || sdp.contains(" typ srflx\n") || sdp.contains(" typ srflx") {
+                    foundExpectedCandidate = true
+                }
+            }
+        }
+
+        guard let pc = factory.peerConnection(with: cfg, constraints: constraints, delegate: delegate) else {
+            completion(IceServerValidationResult(url: url, isTurn: isTurn, reachable: false, reason: "Failed to create RTCPeerConnection"))
+            return
+        }
+        // Сохраним сильную ссылку
+        let token = UUID()
+        validationSessions[token] = (pc: pc, delegate: delegate)
+
+        // Создадим DC чтобы запустить ICE
+        _ = pc.dataChannel(forLabel: "validate", configuration: RTCDataChannelConfiguration())
+
+        pc.offer(for: constraints) { sdp, error in
+            if let error = error {
+                completion(IceServerValidationResult(url: url, isTurn: isTurn, reachable: false, reason: error.localizedDescription))
+                pc.close()
+                return
+            }
+            guard let sdp = sdp else {
+                completion(IceServerValidationResult(url: url, isTurn: isTurn, reachable: false, reason: "No SDP"))
+                pc.close()
+                return
+            }
+            pc.setLocalDescription(sdp) { _ in }
+        }
+
+        // Таймаут ожидания
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+            let result = IceServerValidationResult(url: url, isTurn: isTurn, reachable: foundExpectedCandidate, reason: foundExpectedCandidate ? nil : (isTurn ? "No relay candidates" : "No srflx candidates"))
+            pc.close()
+            self.validationSessions.removeValue(forKey: token)
+            completion(result)
+        }
+    }
+
     // Сбор ICE-кандидатов для ConnectionBundle
     private var collectedIceCandidates: [IceCandidate] = []
     private var currentConnectionId: String? = nil
+    // Держим ссылки на валидационные PC/делегаты, чтобы не деинициализировались
+    private var validationSessions: [UUID: (pc: RTCPeerConnection, delegate: AnyObject)] = [:]
 
     // Состояние сверки отпечатков
     @Published var fingerprintVerificationState: FingerprintVerificationState = .notStarted
@@ -121,6 +252,19 @@ class WebRTCManager: NSObject, ObservableObject {
         RTCInitializeSSL()
         self.factory = RTCPeerConnectionFactory()
         super.init()
+    }
+
+    // Генерация короткого ID соединения как у Rust (8 байт -> 16 hex символов)
+    private func generateShortConnectionId() -> String {
+        var bytes = [UInt8](repeating: 0, count: 8)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status == errSecSuccess {
+            return bytes.map { String(format: "%02x", $0) }.joined()
+        } else {
+            // Фолбэк: используем UUID и берем первые 16 hex символов без дефисов
+            let hex = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+            return String(hex.prefix(16))
+        }
     }
 
     // Явный сброс и закрытие соединения
@@ -461,8 +605,8 @@ class WebRTCManager: NSObject, ObservableObject {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: creating offer")
         
-        // Генерируем connection ID для текущего соединения
-        self.currentConnectionId = UUID().uuidString
+        // Генерируем короткий connection ID (16 hex), как в Rust
+        self.currentConnectionId = generateShortConnectionId()
         print("[\(timeString)] [WebRTC] Generated connection ID:", self.currentConnectionId ?? "nil")
         
         // Очищаем старые кандидаты
@@ -552,9 +696,9 @@ class WebRTCManager: NSObject, ObservableObject {
             self.checkIfReadyToReturnSDP(pc)
         }
         
-        // Десериализуем SDP с автоматическим определением типа (Legacy vs New API)
+        // Десериализуем SDP с автоматическим определением типа: компактные (c:/cb:) или Legacy
         do {
-            let (payload, iceCandidates) = try SdpSerializer.deserializeAuto(offerSDP)
+            let (payload, iceCandidates) = try decodeCompactAutoOrLegacy(offerSDP)
             print("[\(timeString)] [WebRTC] Deserialized offer payload - id:", payload.id, "ts:", payload.ts)
             print("[\(timeString)] [WebRTC] Offer SDP type:", payload.sdp.type)
             print("[\(timeString)] [WebRTC] Offer SDP length:", payload.sdp.sdp.count)
@@ -655,9 +799,9 @@ class WebRTCManager: NSObject, ObservableObject {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: received answer, deserializing...")
         
-        // Десериализуем SDP с автоматическим определением типа (Legacy vs New API)
+        // Десериализуем SDP с автоматическим определением типа: компактные (c:/cb:) или Legacy
         do {
-            let (payload, iceCandidates) = try SdpSerializer.deserializeAuto(answerSDP)
+            let (payload, iceCandidates) = try decodeCompactAutoOrLegacy(answerSDP)
             print("[\(timeString)] [WebRTC] Deserialized answer payload - id:", payload.id, "ts:", payload.ts)
             print("[\(timeString)] [WebRTC] Answer SDP length:", payload.sdp.sdp.count)
             print("[\(timeString)] [WebRTC] ICE candidates count:", iceCandidates.count)
@@ -688,28 +832,28 @@ class WebRTCManager: NSObject, ObservableObject {
             
             let sdp = RTCSessionDescription(type: .answer, sdp: payload.sdp.sdp)
             
-            // Применяем полученные ICE-кандидаты
-            for candidate in iceCandidates {
-                print("[\(timeString)] [WebRTC] Applying remote ICE candidate from answer:", candidate.candidate)
-                let rtcCandidate = RTCIceCandidate(
-                    sdp: candidate.candidate,
-                    sdpMLineIndex: Int32(candidate.sdp_mline_index ?? 0),
-                    sdpMid: candidate.sdp_mid
-                )
-                pc.add(rtcCandidate) { error in
-                    if let error = error {
-                        let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-                        print("[\(timeString2)] [WebRTC] ERROR adding ICE candidate from answer:", error)
-                    }
-                }
-            }
-            
+            // ВАЖНО: сначала устанавливаем remote description, затем добавляем ICE кандидатов
             pc.setRemoteDescription(sdp, completionHandler: { err in
                 let timeString3 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
                 if let err = err {
                     print("[\(timeString3)] [WebRTC] ERROR setting remote answer description:", err)
                 } else {
                     print("[\(timeString3)] [WebRTC] Remote answer description set successfully")
+                    // Теперь применяем полученные ICE-кандидаты
+                    for candidate in iceCandidates {
+                        print("[\(timeString)] [WebRTC] Applying remote ICE candidate from answer:", candidate.candidate)
+                        let rtcCandidate = RTCIceCandidate(
+                            sdp: candidate.candidate,
+                            sdpMLineIndex: Int32(candidate.sdp_mline_index ?? 0),
+                            sdpMid: candidate.sdp_mid
+                        )
+                        pc.add(rtcCandidate) { error in
+                            if let error = error {
+                                let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+                                print("[\(timeString2)] [WebRTC] ERROR adding ICE candidate from answer:", error)
+                            }
+                        }
+                    }
                 }
             })
         } catch {
@@ -790,26 +934,25 @@ class WebRTCManager: NSObject, ObservableObject {
             if let offerCompletion, peerConnection.localDescription?.type == .offer {
                 let sdp = peerConnection.localDescription?.sdp
                 if let sdp = sdp {
-                    // Сериализуем ConnectionBundle через JSON → gzip → base64 (новый API)
+                    // Генерируем компактный бандл (cb:) совместимый с Rust
                     do {
-                        let payload = SdpPayload(
-                            sdp: sdp,
-                            type: "offer",
-                            id: currentConnectionId ?? UUID().uuidString,
-                            ts: Int64(Date().timeIntervalSince1970)
-                        )
-                        let bundle = ConnectionBundle(sdp_payload: payload, ice_candidates: collectedIceCandidates)
-                        let serialized = try SdpSerializer.serializeBundle(bundle)
-                        print("[\(timeString)] [WebRTC] Serialized offer bundle - id:", payload.id, "ts:", payload.ts)
+                        let connectionId = currentConnectionId ?? UUID().uuidString
+                        let compact = buildCompactPayload(from: sdp, type: "offer", connectionId: connectionId, timestamp: Int64(Date().timeIntervalSince1970))
+                        let compactCandidates: [CompactIceCandidate] = collectedIceCandidates.map { c in
+                            CompactIceCandidate(c: c.candidate, md: c.sdp_mid, ml: c.sdp_mline_index, i: connectionId)
+                        }
+                        let bundle = CompactConnectionBundle(s: compact, cs: compactCandidates)
+                        let serialized = try encodeCompactBundle(bundle)
+                        print("[\(timeString)] [WebRTC] Serialized compact offer bundle (cb:) - id:", compact.id, "ts:", compact.ts)
                         print("[\(timeString)] [WebRTC] Serialized offer length:", serialized.count)
                         print("[\(timeString)] [WebRTC] ICE candidates in bundle:", collectedIceCandidates.count)
                         offerCompletion(serialized)
-                        
+
                         // Очищаем состояние после отправки
                         collectedIceCandidates.removeAll()
                         currentConnectionId = nil
                     } catch {
-                        print("[\(timeString)] [WebRTC] ERROR serializing offer:", error)
+                        print("[\(timeString)] [WebRTC] ERROR serializing compact offer:", error)
                         offerCompletion(nil)
                     }
                 } else {
@@ -823,26 +966,25 @@ class WebRTCManager: NSObject, ObservableObject {
             if let answerCompletion, peerConnection.localDescription?.type == .answer {
                 let sdp = peerConnection.localDescription?.sdp
                 if let sdp = sdp {
-                    // Сериализуем ConnectionBundle через JSON → gzip → base64 (новый API)
+                    // Генерируем компактный бандл (cb:) совместимый с Rust
                     do {
-                        let payload = SdpPayload(
-                            sdp: sdp,
-                            type: "answer",
-                            id: currentConnectionId ?? UUID().uuidString,
-                            ts: Int64(Date().timeIntervalSince1970)
-                        )
-                        let bundle = ConnectionBundle(sdp_payload: payload, ice_candidates: collectedIceCandidates)
-                        let serialized = try SdpSerializer.serializeBundle(bundle)
-                        print("[\(timeString)] [WebRTC] Serialized answer bundle - id:", payload.id, "ts:", payload.ts)
+                        let connectionId = currentConnectionId ?? UUID().uuidString
+                        let compact = buildCompactPayload(from: sdp, type: "answer", connectionId: connectionId, timestamp: Int64(Date().timeIntervalSince1970))
+                        let compactCandidates: [CompactIceCandidate] = collectedIceCandidates.map { c in
+                            CompactIceCandidate(c: c.candidate, md: c.sdp_mid, ml: c.sdp_mline_index, i: connectionId)
+                        }
+                        let bundle = CompactConnectionBundle(s: compact, cs: compactCandidates)
+                        let serialized = try encodeCompactBundle(bundle)
+                        print("[\(timeString)] [WebRTC] Serialized compact answer bundle (cb:) - id:", compact.id, "ts:", compact.ts)
                         print("[\(timeString)] [WebRTC] Serialized answer length:", serialized.count)
                         print("[\(timeString)] [WebRTC] ICE candidates in bundle:", collectedIceCandidates.count)
                         answerCompletion(serialized)
-                        
+
                         // Очищаем состояние после отправки
                         collectedIceCandidates.removeAll()
                         currentConnectionId = nil
                     } catch {
-                        print("[\(timeString)] [WebRTC] ERROR serializing answer:", error)
+                        print("[\(timeString)] [WebRTC] ERROR serializing compact answer:", error)
                         answerCompletion(nil)
                     }
                 } else {

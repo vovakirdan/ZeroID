@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 enum ConnectionState: Equatable {
     case idle
@@ -38,27 +39,57 @@ struct ContentView: View {
     @State private var toastMessage = ""
     @State private var offerState: HandshakeOfferState = .offerGenerated("")
     @State private var answerState: HandshakeAnswerState = .waitingOffer
+    @State private var navDirection: NavigationDirection = .forward
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         ZStack {
+            if isInteractiveBackEnabled {
+                // Предыдущий экран под текущим (эффект наслоенности)
+                WelcomeView(
+                    onCreate: { 
+                        navDirection = .forward
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            screen = .choice
+                        }
+                    },
+                    onSettings: {
+                        navDirection = .forward
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            screen = .settings
+                        }
+                    }
+                )
+                .allowsHitTesting(false)
+                .offset(x: min(0, -dragOffset * 0.1))
+            }
+
+            Group {
             switch screen {
                 case .welcome:
                     WelcomeView(
                         onCreate: { 
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .choice
                             }
                         },
                         onSettings: {
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .settings
                             }
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .settings:
                     SettingsView(
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -68,28 +99,36 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .choice:
                     ChoiceView(
                         onCreateOffer: { 
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .handshakeOffer
                             }
                             createOffer()
                         },
                         onAcceptOffer: { 
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .handshakeAnswer
                                 answerState = .waitingOffer
                             }
                         },
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -100,6 +139,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -107,6 +147,10 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .handshakeOffer:
                     HandshakeView(
@@ -132,6 +176,7 @@ struct ContentView: View {
                             vm.webrtc.receiveAnswer(remoteSDP)
                         },
                         onBack: { 
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -143,6 +188,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -150,6 +196,10 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .handshakeAnswer:
                     HandshakeView(
@@ -178,6 +228,7 @@ struct ContentView: View {
                                     isLoading = false
                                 } else {
                                     isLoading = false
+                                    navDirection = .forward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .error("Не удалось принять оффер")
                                     }
@@ -188,6 +239,7 @@ struct ContentView: View {
                             // ЖДЁМ события .verificationRequired от WebRTCManager
                         },
                         onBack: { 
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -199,6 +251,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -206,12 +259,17 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .chat:
                     ChatView(
                         vm: vm,
                         connectionState: connectionState,
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -222,6 +280,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -229,34 +288,83 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .fingerprintVerification:
                     FingerprintVerificationView(
                         webRTCManager: vm.webrtc,
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
                             resetState()
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .error(let error):
                     ErrorView(
                         error: error,
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
                             resetState()
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                 }
-            
+            }
+            .offset(x: dragOffset)
+            .shadow(color: Color.black.opacity(dragOffset > 0 ? 0.15 : 0), radius: 12, x: 0, y: 4)
+
             // Loading overlay
             LoadingOverlay(text: "Обработка...", isLoading: isLoading)
         }
         .toast(isVisible: $showToast, message: toastMessage)
+        .highPriorityGesture(
+            DragGesture()
+                .onChanged { value in
+                    guard isInteractiveBackEnabled else { return }
+                    if value.translation.width > 0 && abs(value.translation.height) < 60 {
+                        dragOffset = value.translation.width
+                    }
+                }
+                .onEnded { value in
+                    guard isInteractiveBackEnabled else { return }
+                    let shouldPop = dragOffset > 100
+                    if shouldPop {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            dragOffset = UIScreen.main.bounds.width
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                            navDirection = .backward
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                screen = .welcome
+                            }
+                            dragOffset = 0
+                            resetState()
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            dragOffset = 0
+                        }
+                    }
+                }
+        )
         .onReceive(vm.webrtc.$isConnected) { connected in
             print("[ContentView] isConnected changed to:", connected)
             if connected && connectionState != .connected {
@@ -319,6 +427,22 @@ struct ContentView: View {
             withAnimation(.easeOut(duration: 0.3)) {
                 showToast = false
             }
+        }
+    }
+}
+
+enum NavigationDirection {
+    case forward
+    case backward
+}
+
+private extension ContentView {
+    var isInteractiveBackEnabled: Bool {
+        switch screen {
+        case .welcome:
+            return false
+        default:
+            return true
         }
     }
 }
