@@ -19,6 +19,8 @@ struct SettingsView: View {
     @State private var validationResults: [WebRTCManager.IceServerValidationResult] = []
     @State private var showToast = false
     @State private var toastMessage = ""
+    // Лимит медиа (в МБ)
+    @State private var maxMediaMB: Int = 16
 
     var body: some View {
         VStack(spacing: 0) {
@@ -151,6 +153,19 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Медиа") {
+                    HStack {
+                        Image(systemName: "paperclip")
+                            .foregroundColor(.cyan)
+                        Stepper(value: $maxMediaMB, in: 1...1024) {
+                            Text("Макс. размер отправляемых файлов: \(maxMediaMB) МБ")
+                        }
+                    }
+                    Text("Файлы шифруются end‑to‑end. Метаданные (например, EXIF) могут быть открытыми.")
+                        .font(.caption)
+                        .foregroundColor(Color.textSecondary)
+                }
+
                 Section {
                     if isValidating {
                         HStack {
@@ -244,6 +259,9 @@ struct SettingsView: View {
             stunServers = stuns
             turnServers = turns
         }
+        // Лимит медиа
+        let mb = UserDefaults.standard.integer(forKey: "max_media_mb")
+        if mb > 0 { maxMediaMB = min(max(1, mb), 1024) }
     }
 
     private func validateServers() {
@@ -340,6 +358,8 @@ struct SettingsView: View {
             mgr.saveIceServers(list)
             toast("Сохранено и применено")
         }
+        // Сохраняем лимит медиа (в МБ)
+        UserDefaults.standard.set(maxMediaMB, forKey: "max_media_mb")
     }
 
     private func toast(_ message: String) {

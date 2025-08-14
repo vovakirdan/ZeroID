@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 
 struct ChatView: View {
     @ObservedObject var vm: ChatViewModel
@@ -7,6 +9,8 @@ struct ChatView: View {
     @Environment(\.colorScheme) var colorScheme
     // Переключатель отображения информации о соединении
     @State private var showConnectionInfo: Bool = false
+    // Импорт файла
+    @State private var showFileImporter: Bool = false
     
     // Единый градиентный фон чата (цвета берутся из Assets)
     private var chatBackground: some View {
@@ -44,14 +48,21 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(vm.messages) { msg in
-                        ChatBubble(
-                            text: msg.text,
-                            isMine: msg.isMine,
-                            timestamp: msg.date
-                        )
-                        .id(msg.id)
-                        .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)),
-                                                removal: .opacity.combined(with: .scale)))
+                        if let media = msg.media {
+                            MediaBubbleView(attachment: media, isMine: msg.isMine, timestamp: msg.date)
+                                .id(msg.id)
+                                .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                                        removal: .opacity.combined(with: .scale)))
+                        } else {
+                            ChatBubble(
+                                text: msg.text,
+                                isMine: msg.isMine,
+                                timestamp: msg.date
+                            )
+                            .id(msg.id)
+                            .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                                    removal: .opacity.combined(with: .scale)))
+                        }
                     }
                 }
                 .padding(.vertical, 8)
@@ -154,6 +165,15 @@ struct ChatView: View {
                 .background(Color.gray.opacity(0.3))
             
             HStack(spacing: 12) {
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.title2)
+                        .foregroundColor(.accentColor)
+                }
+                .disabled(!vm.webrtc.isConnected || !vm.webrtc.isChatEnabled)
+
                 textInputField
                 sendButton
             }
@@ -324,6 +344,16 @@ struct ChatView: View {
             }
         )
         .animation(.spring(response: 0.5, dampingFraction: 0.8), value: showConnectionInfo)
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [UTType.item], allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    vm.sendFile(url: url)
+                }
+            case .failure(let err):
+                print("[ChatView] File import error", err.localizedDescription)
+            }
+        }
         // Индикатор статуса соединения
         .overlay(alignment: .top) {
             HStack(spacing: 6) {
@@ -361,6 +391,57 @@ struct RoundedCorner: Shape {
             cornerRadii: CGSize(width: radius, height: radius)
         )
         return Path(path.cgPath)
+    }
+}
+
+// MARK: - Media bubble UI
+struct MediaBubbleView: View {
+    let attachment: MediaAttachment
+    let isMine: Bool
+    let timestamp: Date
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            if isMine { Spacer(minLength: 60) }
+            VStack(alignment: isMine ? .trailing : .leading, spacing: 6) {
+                Group {
+                    if let data = attachment.data, let uiImage = UIImage(data: data), attachment.mime.starts(with: "image/") {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 220)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    } else {
+                        HStack(spacing: 8) {
+                            Image(systemName: "doc")
+                            Text(attachment.name)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(red: 0.15, green: 0.15, blue: 0.15, opacity: 0.85))
+                        )
+                        .foregroundColor(.white)
+                    }
+                }
+
+                if let p = attachment.progress {
+                    ProgressView(value: p)
+                        .progressViewStyle(.linear)
+                        .frame(maxWidth: 220)
+                }
+
+                Text(timestamp, style: .time)
+                    .font(.caption2)
+                    .foregroundColor(Color(red: 0.7, green: 0.7, blue: 0.7))
+                    .padding(.horizontal, isMine ? 20 : 16)
+            }
+            if !isMine { Spacer(minLength: 60) }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 3)
     }
 }
 

@@ -237,6 +237,15 @@ class WebRTCManager: NSObject, ObservableObject {
     @Published var iceGatheringState: String = "не создан"
     @Published var candidateCount: String = "0"
     private let tagLen: Int = 16 // длина тега Poly1305
+    // Лимит медиа (байты), по умолчанию 16 МБ, можно увеличить через настройки
+    private var maxMediaBytes: Int = 16 * 1024 * 1024
+
+    // Коллбек для доставки входящего медиа в VM
+    var onMediaReceived: ((MediaAttachment) -> Void)?
+
+    // Буферы входящих медиа по протоколу MEDIA_META/CHUNK/END
+    private var mediaBuffers: [String: Data] = [:]
+    private var mediaInfos: [String: (name: String, mime: String, size: Int, total: Int, received: Int)] = [:]
 
     override init() {
         print("[WebRTCManager] Init")
@@ -252,6 +261,10 @@ class WebRTCManager: NSObject, ObservableObject {
         RTCInitializeSSL()
         self.factory = RTCPeerConnectionFactory()
         super.init()
+        // Загружаем лимит медиа из UserDefaults
+        if let mb = UserDefaults.standard.value(forKey: "max_media_mb") as? Int, mb >= 1 {
+            maxMediaBytes = min(mb, 1024) * 1024 * 1024
+        }
     }
 
     // Генерация короткого ID соединения как у Rust (8 байт -> 16 hex символов)
@@ -913,6 +926,122 @@ class WebRTCManager: NSObject, ObservableObject {
             print("[\(timeString2)] [WebRTC] ERROR encrypting message:", error)
         }
     }
+
+    // MARK: - Media protocol (META/CHUNK/END)
+
+    // Вспомогательный Base64 в чанках для больших буферов
+    private func base64Encode(_ data: Data) -> String {
+        return data.base64EncodedString()
+    }
+
+    // Отправить медиа-файл по протоколу Rust: MEDIA_META, MEDIA_CHUNK, MEDIA_END
+    func sendMediaFile(id: String, url: URL, name: String, mime: String, progress: @escaping (Double) -> Void, completion: @escaping (Bool) -> Void) {
+        // Проверка соединения и SAS
+        guard fingerprintVerificationState == .verified else {
+            print("[WebRTC] ERROR: Cannot send media - SAS not verified")
+            completion(false)
+            return
+        }
+        guard let dc = dataChannel, dc.readyState == .open else {
+            print("[WebRTC] ERROR: DataChannel not ready for media")
+            completion(false)
+            return
+        }
+        guard let fileData = try? Data(contentsOf: url) else {
+            print("[WebRTC] ERROR: Failed to read file data")
+            completion(false)
+            return
+        }
+        if fileData.count > maxMediaBytes {
+            print("[WebRTC] ERROR: File exceeds maxMediaBytes limit")
+            completion(false)
+            return
+        }
+
+        // Готовим META
+        let chunkSize = 8 * 1024 // 8KB для совместимости
+        let totalChunks = Int(ceil(Double(fileData.count) / Double(chunkSize)))
+        struct MediaMetaEnc: Codable { let id: String; let name: String; let mime: String; let size: Int; let total_chunks: Int }
+        let meta = MediaMetaEnc(id: id, name: name, mime: mime, size: fileData.count, total_chunks: totalChunks)
+        do {
+            let json = try JSONEncoder().encode(meta)
+            let payload = "MEDIA_META:" + String(data: json, encoding: .utf8)!
+            sendEncryptedString(payload, over: dc)
+        } catch {
+            print("[WebRTC] ERROR: Failed to encode media meta", error.localizedDescription)
+            completion(false)
+            return
+        }
+
+        // Отправляем чанки по очереди
+        DispatchQueue.global(qos: .userInitiated).async {
+            var sentBytes = 0
+            var index = 0
+            while sentBytes < fileData.count {
+                let end = min(sentBytes + chunkSize, fileData.count)
+                let chunk = fileData.subdata(in: sentBytes..<end)
+                let b64 = self.base64Encode(chunk)
+                // Безопасность: ограничим base64 до 32KB как на Rust стороне
+                if b64.utf8.count > 32 * 1024 {
+                    // Если вдруг превысили (не должно при 8KB бинарных), уменьшим блок
+                    let safeEnd = sentBytes + (6 * 1024)
+                    let safeChunk = fileData.subdata(in: sentBytes..<min(safeEnd, fileData.count))
+                    let safeB64 = self.base64Encode(safeChunk)
+                    self.sendMediaChunk(id: id, index: index, b64: safeB64, dc: dc)
+                    sentBytes += safeChunk.count
+                } else {
+                    self.sendMediaChunk(id: id, index: index, b64: b64, dc: dc)
+                    sentBytes = end
+                }
+                index += 1
+                let p = min(1.0, Double(sentBytes) / Double(fileData.count))
+                DispatchQueue.main.async { progress(p) }
+                usleep(5_000) // 5ms
+            }
+
+            // END
+            struct MediaEndEnc: Codable { let id: String }
+            do {
+                let json = try JSONEncoder().encode(MediaEndEnc(id: id))
+                let payload = "MEDIA_END:" + String(data: json, encoding: .utf8)!
+                self.sendEncryptedString(payload, over: dc)
+                DispatchQueue.main.async { completion(true) }
+            } catch {
+                print("[WebRTC] ERROR: Failed to send media end", error.localizedDescription)
+                DispatchQueue.main.async { completion(false) }
+            }
+        }
+    }
+
+    private struct MediaChunkEnc: Codable { let id: String; let index: Int; let data: String }
+    private func sendMediaChunk(id: String, index: Int, b64: String, dc: RTCDataChannel) {
+        do {
+            let json = try JSONEncoder().encode(MediaChunkEnc(id: id, index: index, data: b64))
+            let payload = "MEDIA_CHUNK:" + String(data: json, encoding: .utf8)!
+            sendEncryptedString(payload, over: dc)
+        } catch {
+            let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString)] [WebRTC] ERROR encoding media chunk:", error.localizedDescription)
+        }
+    }
+
+    // Общий помощник: шифруем строку и отправляем как бинарь (как обычный текст в Rust шифруется)
+    private func sendEncryptedString(_ text: String, over dc: RTCDataChannel) {
+        guard var context = cryptoContext else { return }
+        do {
+            let nonce = try ChaChaPoly.Nonce(data: context.sendNonce.toChaChaNonceData())
+            let sealed = try ChaChaPoly.seal(text.data(using: .utf8)!, using: context.sealingKey, nonce: nonce)
+            let encrypted = sealed.ciphertext + sealed.tag
+            let buf = RTCDataBuffer(data: encrypted, isBinary: true)
+            if dc.sendData(buf) {
+                context.sendNonce += 1
+                cryptoContext = context
+            }
+        } catch {
+            let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            print("[\(timeString)] [WebRTC] ERROR sending encrypted control:", error.localizedDescription)
+        }
+    }
     
     // Проверка готовности для отдачи SDP
     private func checkIfReadyToReturnSDP(_ peerConnection: RTCPeerConnection) {
@@ -1173,9 +1302,15 @@ extension WebRTCManager: RTCDataChannelDelegate {
                         
                         let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
                         print("[\(timeString2)] [WebRTC] Decrypted message:", decryptedText)
-                        
-                        DispatchQueue.main.async {
-                            self.receivedMessage = decryptedText
+                        // Разбор управляющих сообщений медиа
+                        if decryptedText.hasPrefix("MEDIA_META:") {
+                            self.handleIncomingMediaMeta(String(decryptedText.dropFirst(11)))
+                        } else if decryptedText.hasPrefix("MEDIA_CHUNK:") {
+                            self.handleIncomingMediaChunk(String(decryptedText.dropFirst(12)))
+                        } else if decryptedText.hasPrefix("MEDIA_END:") {
+                            self.handleIncomingMediaEnd(String(decryptedText.dropFirst(10)))
+                        } else {
+                            DispatchQueue.main.async { self.receivedMessage = decryptedText }
                         }
                     } else {
                         let timeString2 = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
@@ -1190,6 +1325,65 @@ extension WebRTCManager: RTCDataChannelDelegate {
                 print("[\(timeString2)] [WebRTC] ERROR decrypting message:", error)
             }
         }
+    }
+
+    // MARK: - Incoming media handling
+    private struct MediaMetaDec: Codable { let id: String; let name: String; let mime: String; let size: Int; let total_chunks: Int }
+    private struct MediaChunkDec: Codable { let id: String; let index: Int; let data: String }
+    private struct MediaEndDec: Codable { let id: String }
+
+    private func handleIncomingMediaMeta(_ json: String) {
+        guard let data = json.data(using: .utf8), let meta = try? JSONDecoder().decode(MediaMetaDec.self, from: data) else {
+            print("[WebRTC] ERROR parsing MEDIA_META")
+            return
+        }
+        if meta.size > maxMediaBytes {
+            print("[WebRTC] Incoming media too large, ignoring")
+            return
+        }
+        mediaBuffers[meta.id] = Data(capacity: meta.size)
+        mediaInfos[meta.id] = (meta.name, meta.mime, meta.size, meta.total_chunks, 0)
+        print("[WebRTC] MEDIA_META stored id=\(meta.id)")
+    }
+
+    private func handleIncomingMediaChunk(_ json: String) {
+        guard let data = json.data(using: .utf8), let chunk = try? JSONDecoder().decode(MediaChunkDec.self, from: data) else {
+            print("[WebRTC] ERROR parsing MEDIA_CHUNK")
+            return
+        }
+        guard let b = Data(base64Encoded: chunk.data) else {
+            print("[WebRTC] ERROR decoding MEDIA_CHUNK base64")
+            return
+        }
+        if b.count > 64 * 1024 {
+            print("[WebRTC] Single MEDIA_CHUNK too large, dropping")
+            return
+        }
+        guard var buf = mediaBuffers[chunk.id] else { return }
+        buf.append(b)
+        mediaBuffers[chunk.id] = buf
+        if var info = mediaInfos[chunk.id] {
+            info.received += 1
+            mediaInfos[chunk.id] = info
+        }
+    }
+
+    private func handleIncomingMediaEnd(_ json: String) {
+        guard let data = json.data(using: .utf8), let end = try? JSONDecoder().decode(MediaEndDec.self, from: data) else {
+            print("[WebRTC] ERROR parsing MEDIA_END")
+            return
+        }
+        guard let bytes = mediaBuffers.removeValue(forKey: end.id), let info = mediaInfos.removeValue(forKey: end.id) else {
+            print("[WebRTC] MEDIA_END without buffers/info")
+            return
+        }
+        if bytes.count != info.size {
+            print("[WebRTC] MEDIA size mismatch: expected \(info.size), got \(bytes.count)")
+        }
+        // Доставляем в VM
+        let att = MediaAttachment(id: end.id, name: info.name, mime: info.mime, size: info.size, data: bytes, progress: nil)
+        onMediaReceived?(att)
+        print("[WebRTC] MEDIA delivered to UI id=\(end.id)")
     }
     
     func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
