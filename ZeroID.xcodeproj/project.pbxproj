@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		33BE362C2E2CF19F002F7788 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 33BE362B2E2CF19F002F7788 /* WebRTC */; };
 		33BE362F2E2CF2F3002F7788 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 33BE362E2E2CF2F3002F7788 /* WebRTC */; };
+		33EE3D902E4E62F300816334 /* ExyteChat in Frameworks */ = {isa = PBXBuildFile; productRef = 33EE3D8F2E4E62F300816334 /* ExyteChat */; };
 		33F2F06A2E40C87B00EF08BC /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 33F2F0692E40C87B00EF08BC /* SWCompression */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +30,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				33EE3D902E4E62F300816334 /* ExyteChat in Frameworks */,
 				33F2F06A2E40C87B00EF08BC /* SWCompression in Frameworks */,
 				33BE362C2E2CF19F002F7788 /* WebRTC in Frameworks */,
 				33BE362F2E2CF2F3002F7788 /* WebRTC in Frameworks */,
@@ -112,6 +114,7 @@
 			packageReferences = (
 				33BE362A2E2CF19F002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				33F2F0682E40C87B00EF08BC /* XCRemoteSwiftPackageReference "SWCompression" */,
+				33EE3D8E2E4E62F300816334 /* XCRemoteSwiftPackageReference "Chat" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3313453C2E2BB43F00307BD4 /* Products */;
@@ -365,6 +368,14 @@
 				minimumVersion = 138.0.0;
 			};
 		};
+		33EE3D8E2E4E62F300816334 /* XCRemoteSwiftPackageReference "Chat" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/exyte/Chat.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.5;
+			};
+		};
 		33F2F0682E40C87B00EF08BC /* XCRemoteSwiftPackageReference "SWCompression" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/tsolomko/SWCompression.git";
@@ -385,6 +396,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 33BE362A2E2CF19F002F7788 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		33EE3D8F2E4E62F300816334 /* ExyteChat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 33EE3D8E2E4E62F300816334 /* XCRemoteSwiftPackageReference "Chat" */;
+			productName = ExyteChat;
 		};
 		33F2F0692E40C87B00EF08BC /* SWCompression */ = {
 			isa = XCSwiftPackageProductDependency;
