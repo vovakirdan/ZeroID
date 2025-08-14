@@ -15,7 +15,6 @@ struct HandshakeView: View {
     let isLoading: Bool
     
     @State private var showShareSheet = false
-    @State private var showShareOptions = false
     @State private var shareItems: [Any] = []
     @State private var showQR = false
     @State private var generatedQR: UIImage? = nil
@@ -77,7 +76,31 @@ struct HandshakeView: View {
                         }
                         .disabled(sdpText.isEmpty)
 
-                        Button(action: { showShareOptions = true }) {
+                        Menu {
+                            Button {
+                                shareItems = [sdpText]
+                                showShareSheet = true
+                            } label: {
+                                Label("Текст", systemImage: "text.cursor")
+                            }
+                            Button {
+                                if let img = QRUtils.generateQR(from: sdpText) {
+                                    shareItems = [img]
+                                } else {
+                                    shareItems = [sdpText]
+                                }
+                                showShareSheet = true
+                            } label: {
+                                Label("QR как картинка", systemImage: "qrcode")
+                            }
+                            Button {
+                                if let img = QRUtils.generateQR(from: sdpText) {
+                                    UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
+                                }
+                            } label: {
+                                Label("Сохранить QR в Фото", systemImage: "square.and.arrow.down")
+                            }
+                        } label: {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.title3)
                                 .frame(maxWidth: .infinity)
@@ -154,28 +177,7 @@ struct HandshakeView: View {
                 }
             }
         }
-        .confirmationDialog("Поделиться", isPresented: $showShareOptions, titleVisibility: .visible) {
-            Button("Текст") {
-                // Отправляем только текст оффера/ансвера
-                shareItems = [sdpText]
-                showShareSheet = true
-            }
-            Button("QR как картинка") {
-                // Генерируем QR и делимся картинкой
-                if let img = QRUtils.generateQR(from: sdpText) {
-                    shareItems = [img]
-                } else {
-                    shareItems = [sdpText]
-                }
-                showShareSheet = true
-            }
-            Button("Сохранить QR в Фото") {
-                if let img = QRUtils.generateQR(from: sdpText) {
-                    UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
-                }
-            }
-            Button("Отмена", role: .cancel) {}
-        }
+        // Диалог больше не нужен — используем Menu на кнопке
     }
     
     // MARK: - Helper Methods
