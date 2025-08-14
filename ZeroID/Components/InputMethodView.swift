@@ -76,12 +76,20 @@ struct InputMethodView: View {
                     }
                 )
                 
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    InputMethodButton(
-                        icon: "photo",
-                        title: "Из фото",
-                        isSelected: !showingTextInput && photoItem != nil,
-                        action: { showingTextInput = false }
+                PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+                    // Важно: label не должен быть обычной кнопкой с собственным action
+                    HStack(spacing: 6) {
+                        Image(systemName: "photo").font(.caption)
+                        Text("Из фото").font(.caption2)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(!showingTextInput && photoItem != nil ? Color.accentColor : Color.surfaceSecondary)
+                    .foregroundColor(!showingTextInput && photoItem != nil ? .white : Color.textPrimary)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(!showingTextInput && photoItem != nil ? Color.accentColor : Color.borderPrimary, lineWidth: 1)
                     )
                 }
                 
@@ -105,6 +113,7 @@ struct InputMethodView: View {
             .onChange(of: photoItem) { newItem in
                 guard let newItem = newItem else { return }
                 Task {
+                    showingTextInput = false
                     if let data = try? await newItem.loadTransferable(type: Data.self),
                        let ui = UIImage(data: data) {
                         QRUtils.detectQRCode(in: ui) { payload in

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HandshakeView: View {
     let step: HandshakeStep
@@ -62,7 +63,7 @@ struct HandshakeView: View {
                     // Правая половина — две равные иконки
                     HStack(spacing: 12) {
                         Button(action: {
-                            generatedQR = QRUtils.generateQR(from: sdpText)
+                            // Открываем шит, генерация пойдёт асинхронно внутри
                             previousBrightness = UIScreen.main.brightness
                             showQR = true
                         }) {
@@ -128,6 +129,7 @@ struct HandshakeView: View {
         }
         .sheet(isPresented: $showQR, onDismiss: {
             UIScreen.main.brightness = previousBrightness
+            generatedQR = nil
         }) {
             VStack {
                 if let img = generatedQR {
@@ -136,16 +138,18 @@ struct HandshakeView: View {
                         .resizable()
                         .scaledToFit()
                         .padding()
-                        .onAppear {
-                            previousBrightness = UIScreen.main.brightness
-                            UIScreen.main.brightness = 1.0
-                        }
                 } else {
                     ProgressView()
                         .onAppear {
-                            generatedQR = QRUtils.generateQR(from: sdpText)
-                            previousBrightness = UIScreen.main.brightness
+                            // Максимальная яркость сразу при открытии
                             UIScreen.main.brightness = 1.0
+                            // Генерация QR на фоновом потоке, чтобы не блокировать UI
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                let img = QRUtils.generateQR(from: sdpText)
+                                DispatchQueue.main.async {
+                                    self.generatedQR = img
+                                }
+                            }
                         }
                 }
             }

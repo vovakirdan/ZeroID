@@ -10,7 +10,8 @@ struct QRUtils {
         let data = Data(string.utf8)
         let filter = CIFilter.qrCodeGenerator()
         filter.setValue(data, forKey: "inputMessage")
-        filter.setValue("Q", forKey: "inputCorrectionLevel")
+        // Снижаем уровень коррекции до M для ускорения и увеличения вместимости
+        filter.setValue("M", forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage else { return nil }
         let transformed = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let context = CIContext()
