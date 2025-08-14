@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 enum ConnectionState: Equatable {
     case idle
@@ -39,9 +40,31 @@ struct ContentView: View {
     @State private var offerState: HandshakeOfferState = .offerGenerated("")
     @State private var answerState: HandshakeAnswerState = .waitingOffer
     @State private var navDirection: NavigationDirection = .forward
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         ZStack {
+            if isInteractiveBackEnabled {
+                // Предыдущий экран под текущим (эффект наслоенности)
+                WelcomeView(
+                    onCreate: { 
+                        navDirection = .forward
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            screen = .choice
+                        }
+                    },
+                    onSettings: {
+                        navDirection = .forward
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            screen = .settings
+                        }
+                    }
+                )
+                .allowsHitTesting(false)
+                .offset(x: min(0, -dragOffset * 0.1))
+            }
+
+            Group {
             switch screen {
                 case .welcome:
                     WelcomeView(
@@ -302,11 +325,46 @@ struct ContentView: View {
                         removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
                     ))
                 }
-            
+            }
+            .offset(x: dragOffset)
+            .shadow(color: Color.black.opacity(dragOffset > 0 ? 0.15 : 0), radius: 12, x: 0, y: 4)
+
             // Loading overlay
             LoadingOverlay(text: "Обработка...", isLoading: isLoading)
         }
         .toast(isVisible: $showToast, message: toastMessage)
+        .highPriorityGesture(
+            DragGesture()
+                .onChanged { value in
+                    guard isInteractiveBackEnabled else { return }
+                    if value.translation.width > 0 && abs(value.translation.height) < 60 {
+                        dragOffset = value.translation.width
+                    }
+                }
+                .onEnded { value in
+                    guard isInteractiveBackEnabled else { return }
+                    let shouldPop = dragOffset > 100
+                    if shouldPop {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            dragOffset = UIScreen.main.bounds.width
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                            navDirection = .backward
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) {
+                                screen = .welcome
+                            }
+                            dragOffset = 0
+                            resetState()
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            dragOffset = 0
+                        }
+                    }
+                }
+        )
         .onReceive(vm.webrtc.$isConnected) { connected in
             print("[ContentView] isConnected changed to:", connected)
             if connected && connectionState != .connected {
@@ -376,6 +434,17 @@ struct ContentView: View {
 enum NavigationDirection {
     case forward
     case backward
+}
+
+private extension ContentView {
+    var isInteractiveBackEnabled: Bool {
+        switch screen {
+        case .welcome:
+            return false
+        default:
+            return true
+        }
+    }
 }
 
 #Preview {
