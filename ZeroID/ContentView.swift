@@ -38,6 +38,7 @@ struct ContentView: View {
     @State private var toastMessage = ""
     @State private var offerState: HandshakeOfferState = .offerGenerated("")
     @State private var answerState: HandshakeAnswerState = .waitingOffer
+    @State private var navDirection: NavigationDirection = .forward
 
     var body: some View {
         ZStack {
@@ -45,20 +46,27 @@ struct ContentView: View {
                 case .welcome:
                     WelcomeView(
                         onCreate: { 
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .choice
                             }
                         },
                         onSettings: {
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .settings
                             }
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
                     
                 case .settings:
                     SettingsView(
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -68,28 +76,36 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
                     
                 case .choice:
                     ChoiceView(
                         onCreateOffer: { 
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .handshakeOffer
                             }
                             createOffer()
                         },
                         onAcceptOffer: { 
+                            navDirection = .forward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .handshakeAnswer
                                 answerState = .waitingOffer
                             }
                         },
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -100,6 +116,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -107,6 +124,10 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .handshakeOffer:
                     HandshakeView(
@@ -132,6 +153,7 @@ struct ContentView: View {
                             vm.webrtc.receiveAnswer(remoteSDP)
                         },
                         onBack: { 
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -143,6 +165,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -150,6 +173,10 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .handshakeAnswer:
                     HandshakeView(
@@ -178,6 +205,7 @@ struct ContentView: View {
                                     isLoading = false
                                 } else {
                                     isLoading = false
+                                    navDirection = .forward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .error("Не удалось принять оффер")
                                     }
@@ -188,6 +216,7 @@ struct ContentView: View {
                             // ЖДЁМ события .verificationRequired от WebRTCManager
                         },
                         onBack: { 
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -199,6 +228,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -206,12 +236,17 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                     
                 case .chat:
                     ChatView(
                         vm: vm,
                         connectionState: connectionState,
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
@@ -222,6 +257,7 @@ struct ContentView: View {
                         DragGesture()
                             .onEnded { gesture in
                                 if gesture.translation.width > 100 && abs(gesture.translation.height) < 50 {
+                                    navDirection = .backward
                                     withAnimation(.easeInOut(duration: 0.3)) {
                                         screen = .welcome
                                     }
@@ -229,28 +265,42 @@ struct ContentView: View {
                                 }
                             }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
                     
                 case .fingerprintVerification:
                     FingerprintVerificationView(
                         webRTCManager: vm.webrtc,
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
                             resetState()
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
                     
                 case .error(let error):
                     ErrorView(
                         error: error,
                         onBack: {
+                            navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 screen = .welcome
                             }
                             resetState()
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
                 }
             
             // Loading overlay
@@ -321,6 +371,11 @@ struct ContentView: View {
             }
         }
     }
+}
+
+enum NavigationDirection {
+    case forward
+    case backward
 }
 
 #Preview {
