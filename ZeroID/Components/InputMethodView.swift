@@ -172,6 +172,8 @@ struct InputMethodButton: View {
 
 // Простейшая эвристика валидности полезной нагрузки из QR
 private func isLikelyValidPayload(_ s: String) -> Bool {
+    // Компактные форматы: c:/cb: — считаем валидными
+    if s.hasPrefix("c:") || s.hasPrefix("cb:") { return true }
     if let data = Data(base64Encoded: s),
        let decompressed = try? SWCompression.GzipArchive.unarchive(archive: data),
        let json = try? JSONSerialization.jsonObject(with: decompressed) as? [String: Any] {
