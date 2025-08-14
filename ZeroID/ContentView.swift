@@ -261,9 +261,8 @@ struct ContentView: View {
                     ))
                     
                 case .chat:
-                    ChatView(
+                    ChatScreen(
                         vm: vm,
-                        connectionState: connectionState,
                         onBack: {
                             navDirection = .backward
                             withAnimation(.easeInOut(duration: 0.3)) {

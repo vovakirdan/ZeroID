@@ -1,123 +1,184 @@
-// ChatViewModel.swift
+// ViewModels/ChatViewModel.swift
 
 import Foundation
 import Combine
+import ExyteChat
 
-class ChatViewModel: ObservableObject {
-    @Published var messages: [Message] = []
-    @Published var inputText: String = ""
+final class ChatViewModel: ObservableObject {
+
+    // MARK: - Published state for ExyteChat
+    @Published var chatMessages: [ExyteChat.Message] = []
     @Published var isSending: Bool = false
 
+    // Text input is managed by ExyteChat, but keep this for potential external bindings
+    @Published var inputText: String = ""
+
+    // MARK: - Transport / Backend
     let webrtc = WebRTCManager()
-    
+
+    // MARK: - Users (map your identities here)
+    // Replace with your real identities if you have them
+    let me: ExyteChat.User = .init(
+        id: "me",
+        name: "Me",
+        avatarURL: nil,
+        isCurrentUser: true
+    )
+
+    let peer: ExyteChat.User = .init(
+        id: "peer",
+        name: "Peer",
+        avatarURL: nil,
+        isCurrentUser: false
+    )
+
+    // MARK: - Internals
     private var cancellables = Set<AnyCancellable>()
     private var disconnectCleanupWorkItem: DispatchWorkItem?
     private var finalDisconnect: Bool = false
 
+    // MARK: - Init
     init() {
-        // Подписка на входящие текстовые сообщения
+        // Text messages incoming from WebRTC -> append as "peer" message
         webrtc.$receivedMessage
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] text in
-                guard !text.isEmpty else { return }
-                // Добавляем время к логу для отладки
-                let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-                print("[\(timeString)] [ChatViewModel] Received message:", text)
-                self?.messages.append(Message(text: text, isMine: false, date: Date()))
+                guard let self, !text.isEmpty else { return }
+                let msg = ExyteChat.Message(
+                    id: UUID().uuidString,
+                    user: self.peer,
+                    status: .read,
+                    createdAt: Date(),
+                    text: text,
+                    attachments: [],
+                    recording: nil,
+                    replyMessage: nil
+                )
+                self.chatMessages.append(msg)
             }
             .store(in: &cancellables)
 
-        // Подписка на входящие медиа
+        // Media receiving from WebRTC -> you can convert to ExyteChat.Attachment here if needed
         webrtc.onMediaReceived = { [weak self] media in
             guard let self else { return }
             DispatchQueue.main.async {
-                self.messages.append(Message(text: "", isMine: false, date: Date(), media: media))
+                // Minimal placeholder: show as text with file name.
+                // TODO: Map your MediaAttachment to ExyteChat.Attachment using real URLs (thumbnail/full).
+                let display = media.name.isEmpty ? "Received file" : "Received: \(media.name)"
+                let msg = ExyteChat.Message(
+                    id: UUID().uuidString,
+                    user: self.peer,
+                    status: .read,
+                    createdAt: Date(),
+                    text: display,
+                    attachments: [],
+                    recording: nil,
+                    replyMessage: nil
+                )
+                self.chatMessages.append(msg)
             }
         }
 
-        // Очистка сообщений при отключении/сбросе соединения
-        // Реагируем и на изменение состояния ICE, чтобы поймать случаи убийства приложения на другой стороне
+        // Connection state -> clear or keep messages on full disconnect (same logic as before)
         webrtc.$isConnected
             .removeDuplicates()
             .sink { [weak self] connected in
                 guard let self else { return }
                 if connected {
-                    // Отмена таймера очистки при восстановлении
                     self.disconnectCleanupWorkItem?.cancel()
                     self.disconnectCleanupWorkItem = nil
                     self.finalDisconnect = false
                 } else {
-                    // Запускаем таймер ожидания восстановления соединения
                     self.scheduleDisconnectCleanup()
                 }
             }
             .store(in: &cancellables)
     }
 
-    func sendMessage() {
-        guard !inputText.isEmpty else { return }
-        let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        print("[\(timeString)] [ChatViewModel] Sending message:", inputText)
-        webrtc.sendMessage(inputText)
-        messages.append(Message(text: inputText, isMine: true, date: Date()))
-        inputText = ""
+    // MARK: - Sending text from ExyteChat's didSendMessage
+    func send(draft: ExyteChat.DraftMessage) {
+        let text: String = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        // Optimistic local append
+        let local = ExyteChat.Message(
+            id: draft.id ?? UUID().uuidString,
+            user: me,
+            status: .sent,
+            createdAt: draft.createdAt,
+            text: text,
+            attachments: [],
+            recording: nil,
+            replyMessage: nil
+        )
+        chatMessages.append(local)
+
+        // Transport
+        let ts = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        print("[\(ts)] [ChatViewModel] Sending message:", text)
+        webrtc.sendMessage(text)
+
+        // NOTE: if you need to react on delivery/ack - update status later
     }
 
-    // Отправка медиа-файла с прогрессом
+    // MARK: - Sending media from ExyteChat (images/videos/audio)
+    // Map DraftMessage.medias to your WebRTC file sender if you need it now.
+    // This is a hook where you can request file URLs and call webrtc.sendMediaFile(...)
+    func sendMediasFromDraft(_ draft: ExyteChat.DraftMessage) {
+        // TODO: Convert draft.medias -> URLs and call webrtc.sendMediaFile(...)
+        // For now we keep text-only minimal viable integration.
+    }
+
+    // MARK: - Manual file sharing (Documents picker or external URLs)
     func sendFile(url: URL) {
-        // Для файлов из Files.app требуется security-scoped доступ
         var needsStop = false
         if url.startAccessingSecurityScopedResource() {
             needsStop = true
         }
-        defer {
-            if needsStop { url.stopAccessingSecurityScopedResource() }
-        }
+        defer { if needsStop { url.stopAccessingSecurityScopedResource() } }
 
-        // Создаем локальное сообщение с прогрессом
         let fileName = url.lastPathComponent
         let mime = ChatViewModel.mimeType(for: url)
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
-        let id = "\(Int(Date().timeIntervalSince1970))-\(fileName)"
-        let attachment = MediaAttachment(id: id, name: fileName, mime: mime, size: size, data: nil, progress: 0)
-        let msgIndex = messages.count
-        messages.append(Message(text: "", isMine: true, date: Date(), media: attachment))
 
-        // Предпросмотр локально (например, изображения)
-        if mime.starts(with: "image/"), let data = try? Data(contentsOf: url) {
-            if messages.indices.contains(msgIndex), var media = messages[msgIndex].media {
-                media.data = data
-                messages[msgIndex].media = media
-            }
-        }
+        // Local echo message (placeholder)
+        let local = ExyteChat.Message(
+            id: UUID().uuidString,
+            user: me,
+            status: .sent,
+            createdAt: Date(),
+            text: "Sending: \(fileName) (\(size) bytes)",
+            attachments: [],
+            recording: nil,
+            replyMessage: nil
+        )
+        chatMessages.append(local)
 
-        webrtc.sendMediaFile(id: id, url: url, name: fileName, mime: mime) { [weak self] progress in
+        // Actual transport via your WebRTC pipe
+        webrtc.sendMediaFile(id: local.id, url: url, name: fileName, mime: mime) { [weak self] progress in
             guard let self else { return }
             DispatchQueue.main.async {
-                if self.messages.indices.contains(msgIndex), var media = self.messages[msgIndex].media {
-                    media.progress = progress
-                    self.messages[msgIndex].media = media
-                }
+                // You can update a progress UI by editing a custom attachment later
+                print("[Upload] \(fileName) progress:", progress)
             }
         } completion: { [weak self] success in
             guard let self else { return }
             DispatchQueue.main.async {
                 if !success {
-                    // Удаляем сообщение при ошибке
-                    self.messages.removeAll { $0.media?.id == id }
+                    self.chatMessages.removeAll { $0.id == local.id }
                 } else {
-                    // Финальный прогресс 1.0
-                    if let idx = self.messages.firstIndex(where: { $0.media?.id == id }) {
-                        self.messages[idx].media?.progress = 1.0
+                    // Optionally mark as read/delivered
+                    if let idx = self.chatMessages.firstIndex(where: { $0.id == local.id }) {
+                        self.chatMessages[idx].status = .read
                     }
                 }
             }
         }
     }
 
+    // MARK: - Utilities
     private static func mimeType(for url: URL) -> String {
-        // Простое определение по расширению
-        let ext = url.pathExtension.lowercased()
-        switch ext {
+        switch url.pathExtension.lowercased() {
         case "png": return "image/png"
         case "jpg", "jpeg": return "image/jpeg"
         case "gif": return "image/gif"
@@ -131,22 +192,19 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    // Явная очистка истории (при выходе из диалога)
     func clearMessages() {
-        messages.removeAll()
+        chatMessages.removeAll()
     }
 
-    // План очистки при дисконнекте, если не восстановились за 10 сек
     private func scheduleDisconnectCleanup() {
         let graceSeconds: Double = 10
-        // Если уже запущен таймер — не создаем новый
         if disconnectCleanupWorkItem != nil { return }
 
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            print("[ChatViewModel] Disconnect grace timer fired, isConnected=\(self.webrtc.isConnected), finalDisconnect=\(self.finalDisconnect)")
+            print("[ChatViewModel] Disconnect grace fired, isConnected=\(self.webrtc.isConnected), final=\(self.finalDisconnect)")
             if !self.webrtc.isConnected && !self.finalDisconnect {
-                self.messages.removeAll()
+                self.chatMessages.removeAll()
                 self.finalDisconnect = true
             }
             self.disconnectCleanupWorkItem = nil
@@ -155,4 +213,3 @@ class ChatViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds, execute: work)
     }
 }
-
