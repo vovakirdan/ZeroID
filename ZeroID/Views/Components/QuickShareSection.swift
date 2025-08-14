@@ -119,8 +119,10 @@ struct QuickShareSection: View {
         }
     }
 
-    // Простая эвристика валидности: base64+gzip, начинается с v=0 после декомпрессии
+    // Простая эвристика валидности: поддержка новых префиксов c:/cb: и legacy base64+gzip
     private func isLikelyValidPayload(_ s: String) -> Bool {
+        // Компактные форматы: c:/cb: — считаем валидными
+        if s.hasPrefix("c:") || s.hasPrefix("cb:") { return true }
         if let data = Data(base64Encoded: s),
            let decompressed = try? SWCompression.GzipArchive.unarchive(archive: data),
            let json = try? JSONSerialization.jsonObject(with: decompressed) as? [String: Any] {
