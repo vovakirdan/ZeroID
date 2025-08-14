@@ -64,6 +64,15 @@ class ChatViewModel: ObservableObject {
 
     // Отправка медиа-файла с прогрессом
     func sendFile(url: URL) {
+        // Для файлов из Files.app требуется security-scoped доступ
+        var needsStop = false
+        if url.startAccessingSecurityScopedResource() {
+            needsStop = true
+        }
+        defer {
+            if needsStop { url.stopAccessingSecurityScopedResource() }
+        }
+
         // Создаем локальное сообщение с прогрессом
         let fileName = url.lastPathComponent
         let mime = ChatViewModel.mimeType(for: url)
@@ -74,7 +83,7 @@ class ChatViewModel: ObservableObject {
         messages.append(Message(text: "", isMine: true, date: Date(), media: attachment))
 
         // Предпросмотр локально (например, изображения)
-        if let data = try? Data(contentsOf: url) {
+        if mime.starts(with: "image/"), let data = try? Data(contentsOf: url) {
             if messages.indices.contains(msgIndex), var media = messages[msgIndex].media {
                 media.data = data
                 messages[msgIndex].media = media

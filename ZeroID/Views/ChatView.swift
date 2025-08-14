@@ -179,25 +179,9 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(
-                Rectangle()
-                    .fill(
-                        colorScheme == .dark 
-                        ? Color.black.opacity(0.8) 
-                        : Color.white.opacity(0.9)
-                    )
-                    .blur(radius: 10)
-            )
+            .background(.thinMaterial)
         }
-        .background(
-            Rectangle()
-                .fill(
-                    colorScheme == .dark 
-                    ? Color.black.opacity(0.9)
-                    : Color.white.opacity(0.9)
-                )
-                .ignoresSafeArea(edges: .bottom)
-        )
+        .background(.ultraThinMaterial)
     }
     
     // Модальное окно с информацией о соединении
@@ -317,12 +301,20 @@ struct ChatView: View {
         .padding(.horizontal)
     }
     
+    // Скрыть клавиатуру по тапу
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             headerView
             chatArea
-            inputArea
+                .contentShape(Rectangle())
+                .onTapGesture { dismissKeyboard() }
         }
+        .safeAreaInset(edge: .bottom) { inputArea }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(chatBackground)
         .navigationBarHidden(true)
         .overlay(

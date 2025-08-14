@@ -164,11 +164,8 @@ struct ContentView: View {
                             showToast(message: "SDP скопирован в буфер")
                         },
                         onPaste: { 
-                            if let pastedText = UIPasteboard.general.string {
-                                remoteSDP = pastedText
-                                offerState = .waitingForAnswer
-                                showToast(message: "SDP вставлен из буфера")
-                            }
+                            // Ничего не читаем автоматически — текст вводится пользователем или через кнопку Paste
+                            offerState = .waitingForAnswer
                         },
                         onGenerateAnswer: nil,
                         onContinue: {
@@ -213,10 +210,7 @@ struct ContentView: View {
                             showToast(message: "SDP скопирован в буфер")
                         },
                         onPaste: { 
-                            if let pastedText = UIPasteboard.general.string {
-                                remoteSDP = pastedText
-                                showToast(message: "SDP вставлен из буфера")
-                            }
+                            // Пользователь вставляет вручную через UI — не подменяем из буфера автоматически
                         },
                         onGenerateAnswer: {
                             isLoading = true
@@ -225,6 +219,8 @@ struct ContentView: View {
                                     mySDP = answerSDP
                                     answerState = .answerGenerated(answerSDP)
                                     connectionState = .answerGenerated(answerSDP)
+                                    UIPasteboard.general.string = answerSDP
+                                    showToast(message: "Answer скопирован в буфер")
                                     isLoading = false
                                 } else {
                                     isLoading = false
@@ -399,6 +395,8 @@ struct ContentView: View {
                 mySDP = sdp
                 offerState = .offerGenerated(sdp)
                 connectionState = .offerGenerated(sdp)
+                UIPasteboard.general.string = sdp
+                showToast(message: "Offer скопирован в буфер")
             } else {
                 screen = .error("Не удалось создать оффер")
             }
