@@ -1,4 +1,6 @@
 import SwiftUI
+import PhotosUI
+import SWCompression
 
 struct InputMethodView: View {
     let label: String
@@ -6,6 +8,9 @@ struct InputMethodView: View {
     let onPaste: () -> Void
     
     @State private var showingTextInput = true
+    @State private var showScanner = false
+    @State private var photoItem: PhotosPickerItem? = nil
+    @State private var showInvalidAlert = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -36,13 +41,12 @@ struct InputMethodView: View {
                     }
                 }
             } else {
-                // Заглушка для будущих методов ввода
-                VStack(spacing: 16) {
-                    Image(systemName: "hammer.fill")
+                // Режим без поля ввода — ждём скан/выбор фото
+                VStack(spacing: 12) {
+                    Image(systemName: "qrcode.viewfinder")
                         .font(.system(size: 40))
                         .foregroundColor(Color.textSecondary)
-                    
-                    Text("Скоро будет доступно")
+                    Text("Откройте камеру для сканирования или выберите фото с QR")
                         .font(.caption)
                         .foregroundColor(Color.textSecondary)
                 }
@@ -65,23 +69,64 @@ struct InputMethodView: View {
                 InputMethodButton(
                     icon: "qrcode.viewfinder",
                     title: "Скан QR",
-                    isSelected: false,
-                    isEnabled: false,
-                    action: { /* TODO: Реализовать скан QR */ }
+                    isSelected: !showingTextInput && showScanner,
+                    action: {
+                        showingTextInput = false
+                        showScanner = true
+                    }
                 )
                 
-                InputMethodButton(
-                    icon: "photo",
-                    title: "Из фото",
-                    isSelected: false,
-                    isEnabled: false,
-                    action: { /* TODO: Реализовать загрузку из фото */ }
-                )
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    InputMethodButton(
+                        icon: "photo",
+                        title: "Из фото",
+                        isSelected: !showingTextInput && photoItem != nil,
+                        action: { showingTextInput = false }
+                    )
+                }
                 
                 Spacer()
             }
-            
-            
+            .sheet(isPresented: $showScanner) {
+                QRScannerView(onCode: { payload in
+                    if isLikelyValidPayload(payload) {
+                        inputText = payload
+                        onPaste()
+                        showingTextInput = true
+                    } else {
+                        showInvalidAlert = true
+                    }
+                    showScanner = false
+                }, onClose: {
+                    showScanner = false
+                })
+                .ignoresSafeArea()
+            }
+            .onChange(of: photoItem) { newItem in
+                guard let newItem = newItem else { return }
+                Task {
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let ui = UIImage(data: data) {
+                        QRUtils.detectQRCode(in: ui) { payload in
+                            DispatchQueue.main.async {
+                                if let payload, isLikelyValidPayload(payload) {
+                                    inputText = payload
+                                    onPaste()
+                                    showingTextInput = true
+                                } else {
+                                    showInvalidAlert = true
+                                }
+                            }
+                        }
+                    }
+                    self.photoItem = nil
+                }
+            }
+            .alert("Неверный QR-код", isPresented: $showInvalidAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("QR не содержит корректный оффер/ответ")
+            }
         }
     }
 }
@@ -114,6 +159,19 @@ struct InputMethodButton: View {
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1.0 : 0.6)
     }
+}
+
+// Простейшая эвристика валидности полезной нагрузки из QR
+private func isLikelyValidPayload(_ s: String) -> Bool {
+    if let data = Data(base64Encoded: s),
+       let decompressed = try? SWCompression.GzipArchive.unarchive(archive: data),
+       let json = try? JSONSerialization.jsonObject(with: decompressed) as? [String: Any] {
+        if json["sdp_payload"] != nil { return true }
+        if let sdpObj = json["sdp"] as? [String: Any], let sdp = sdpObj["sdp"] as? String {
+            return sdp.hasPrefix("v=0")
+        }
+    }
+    return false
 }
 
 #Preview {

@@ -16,6 +16,9 @@ struct HandshakeView: View {
     @State private var showShareSheet = false
     @State private var showShareOptions = false
     @State private var shareItems: [Any] = []
+    @State private var showQR = false
+    @State private var generatedQR: UIImage? = nil
+    @State private var previousBrightness: CGFloat = UIScreen.main.brightness
 
     var body: some View {
         VStack {
@@ -46,19 +49,45 @@ struct HandshakeView: View {
                 )
                 .padding(.bottom, 14)
                 
-                // Кнопки действий для скопированного SDP
+                // Ряд действий: Copy занимает половину, справа — две иконки 50/50
                 HStack(spacing: 12) {
+                    // Левая половина — большой Copy
                     SecondaryButton(
                         title: "Копировать",
                         icon: "document.on.document",
                         action: onCopy
                     )
-                    
-                    SecondaryButton(
-                        title: "Поделиться",
-                        icon: "square.and.arrow.up",
-                        action: { showShareOptions = true }
-                    )
+                    .frame(maxWidth: .infinity)
+
+                    // Правая половина — две равные иконки
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            generatedQR = QRUtils.generateQR(from: sdpText)
+                            previousBrightness = UIScreen.main.brightness
+                            showQR = true
+                        }) {
+                            Image(systemName: "qrcode")
+                                .font(.title3)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(Color.surfaceSecondary)
+                                .foregroundColor(Color.textPrimary)
+                                .cornerRadius(14)
+                        }
+                        .disabled(sdpText.isEmpty)
+
+                        Button(action: { showShareOptions = true }) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.title3)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(Color.surfaceSecondary)
+                                .foregroundColor(Color.textPrimary)
+                                .cornerRadius(14)
+                        }
+                        .disabled(sdpText.isEmpty)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .padding(.bottom, 14)
             }
@@ -86,11 +115,7 @@ struct HandshakeView: View {
                 .padding(.top, 8)
             }
             
-            // Раздел: быстрый обмен (QR, AirDrop, Галерея)
-            if shouldShowCopyField() || shouldShowPasteField() {
-                QuickShareSection(step: step, sdpText: sdpText, remoteSDP: $remoteSDP, onPaste: onPaste)
-                    .padding(.top, 20)
-            }
+            // Упрощение интерфейса: удалили блок быстрого обмена
 
             Spacer()
         }
@@ -101,20 +126,48 @@ struct HandshakeView: View {
         .sheet(isPresented: $showShareSheet) {
             ActivityView(activityItems: shareItems)
         }
+        .sheet(isPresented: $showQR, onDismiss: {
+            UIScreen.main.brightness = previousBrightness
+        }) {
+            VStack {
+                if let img = generatedQR {
+                    Image(uiImage: img)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .padding()
+                        .onAppear {
+                            previousBrightness = UIScreen.main.brightness
+                            UIScreen.main.brightness = 1.0
+                        }
+                } else {
+                    ProgressView()
+                        .onAppear {
+                            generatedQR = QRUtils.generateQR(from: sdpText)
+                            previousBrightness = UIScreen.main.brightness
+                            UIScreen.main.brightness = 1.0
+                        }
+                }
+            }
+        }
         .confirmationDialog("Поделиться", isPresented: $showShareOptions, titleVisibility: .visible) {
             Button("Текст") {
                 // Отправляем только текст оффера/ансвера
                 shareItems = [sdpText]
                 showShareSheet = true
             }
-            Button("QR-картинка") {
+            Button("QR как картинка") {
                 // Генерируем QR и делимся картинкой
                 if let img = QRUtils.generateQR(from: sdpText) {
                     shareItems = [img]
-                    showShareSheet = true
                 } else {
                     shareItems = [sdpText]
-                    showShareSheet = true
+                }
+                showShareSheet = true
+            }
+            Button("Сохранить QR в Фото") {
+                if let img = QRUtils.generateQR(from: sdpText) {
+                    UIImageWriteToSavedPhotosAlbum(img, nil, nil, nil)
                 }
             }
             Button("Отмена", role: .cancel) {}
