@@ -3,6 +3,7 @@
 import Foundation
 import WebRTC
 import CryptoKit
+import Security
 
 // Криптографический контекст для шифрования сообщений
 struct CryptoContext {
@@ -121,6 +122,19 @@ class WebRTCManager: NSObject, ObservableObject {
         RTCInitializeSSL()
         self.factory = RTCPeerConnectionFactory()
         super.init()
+    }
+
+    // Генерация короткого ID соединения как у Rust (8 байт -> 16 hex символов)
+    private func generateShortConnectionId() -> String {
+        var bytes = [UInt8](repeating: 0, count: 8)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        if status == errSecSuccess {
+            return bytes.map { String(format: "%02x", $0) }.joined()
+        } else {
+            // Фолбэк: используем UUID и берем первые 16 hex символов без дефисов
+            let hex = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+            return String(hex.prefix(16))
+        }
     }
 
     // Явный сброс и закрытие соединения
@@ -461,8 +475,8 @@ class WebRTCManager: NSObject, ObservableObject {
         let timeString = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         print("[\(timeString)] [WebRTC] Initiator: creating offer")
         
-        // Генерируем connection ID для текущего соединения
-        self.currentConnectionId = UUID().uuidString
+        // Генерируем короткий connection ID (16 hex), как в Rust
+        self.currentConnectionId = generateShortConnectionId()
         print("[\(timeString)] [WebRTC] Generated connection ID:", self.currentConnectionId ?? "nil")
         
         // Очищаем старые кандидаты
