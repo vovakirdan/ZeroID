@@ -233,11 +233,11 @@ struct ChatScreen: View {
             .padding(.top)
 
             VStack(spacing: 12) {
-                infoRow("DataChannel", vm.webrtc.dataChannelState, vm.webrtc.isConnected ? .green : .orange)
-                infoRow("ICE Connection", vm.webrtc.iceConnectionState, .blue)
-                infoRow("ICE Gathering", vm.webrtc.iceGatheringState, .purple)
-                infoRow("Candidates", "\(vm.webrtc.candidateCount)", .brown)
-                infoRow("Status", vm.webrtc.isConnected ? "active" : "not ready", vm.webrtc.isConnected ? .green : .red)
+                infoRow("DataChannel", vm.webrtc.dataChannelState)
+                infoRow("ICE Connection", vm.webrtc.iceConnectionState)
+                infoRow("ICE Gathering", vm.webrtc.iceGatheringState)
+                infoRow("Candidates", vm.webrtc.candidateCount)
+                infoRow("Status", vm.webrtc.isConnected ? "active" : "not ready")
             }
             .padding(.horizontal)
             Spacer()
@@ -248,12 +248,42 @@ struct ChatScreen: View {
         .shadow(radius: 10)
     }
 
-    private func infoRow(_ title: String, _ value: String, _ color: Color) -> some View {
+    private func infoRow(_ title: String, _ value: String) -> some View {
         HStack {
             Text(title).font(.body).foregroundColor(.secondary)
             Spacer()
-            Text(value).font(.body).foregroundColor(color).fontWeight(.medium)
+            Text(value).font(.body).fontWeight(.medium)
         }
         .padding(.vertical, 4)
     }
+}
+
+// MARK: - Preview
+#Preview("ChatScreen - Connected") {
+    ChatScreen(
+        vm: ChatViewModel.previewConnected,
+        onBack: {}
+    )
+}
+
+#Preview("ChatScreen - Waiting Connection") {
+    ChatScreen(
+        vm: ChatViewModel.previewWaitingConnection,
+        onBack: {}
+    )
+}
+
+#Preview("ChatScreen - Waiting Fingerprint") {
+    ChatScreen(
+        vm: ChatViewModel.previewWaitingFingerprint,
+        onBack: {}
+    )
+}
+
+#Preview("ChatScreen - Dark Mode") {
+    ChatScreen(
+        vm: ChatViewModel.previewConnected,
+        onBack: {}
+    )
+    .preferredColorScheme(.dark)
 }

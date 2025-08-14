@@ -213,3 +213,77 @@ final class ChatViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds, execute: work)
     }
 }
+
+// MARK: - Preview Extensions
+extension ChatViewModel {
+    /// Preview для подключенного состояния с сообщениями
+    static var previewConnected: ChatViewModel {
+        let vm = ChatViewModel()
+        vm.webrtc.isConnected = true
+        vm.webrtc.isChatEnabled = true
+        vm.webrtc.dataChannelState = "открыт (1)"
+        vm.webrtc.iceConnectionState = "1"
+        vm.webrtc.iceGatheringState = "2"
+        vm.webrtc.candidateCount = "5"
+        
+        // Добавляем тестовые сообщения
+        vm.chatMessages = [
+            ExyteChat.Message(
+                id: "1",
+                user: vm.me,
+                status: .read,
+                createdAt: Date().addingTimeInterval(-3600),
+                text: "Привет! Как дела?",
+                attachments: [],
+                recording: nil,
+                replyMessage: nil
+            ),
+            ExyteChat.Message(
+                id: "2",
+                user: vm.peer,
+                status: .read,
+                createdAt: Date().addingTimeInterval(-1800),
+                text: "Привет! Все хорошо, спасибо. А у тебя?",
+                attachments: [],
+                recording: nil,
+                replyMessage: nil
+            ),
+            ExyteChat.Message(
+                id: "3",
+                user: vm.me,
+                status: .read,
+                createdAt: Date().addingTimeInterval(-900),
+                text: "Отлично! Готов к работе над проектом.",
+                attachments: [],
+                recording: nil,
+                replyMessage: nil
+            )
+        ]
+        
+        return vm
+    }
+    
+    /// Preview для ожидания соединения
+    static var previewWaitingConnection: ChatViewModel {
+        let vm = ChatViewModel()
+        vm.webrtc.isConnected = false
+        vm.webrtc.isChatEnabled = false
+        vm.webrtc.dataChannelState = "не создан"
+        vm.webrtc.iceConnectionState = "0"
+        vm.webrtc.iceGatheringState = "0"
+        vm.webrtc.candidateCount = "0"
+        return vm
+    }
+    
+    /// Preview для ожидания подтверждения отпечатков
+    static var previewWaitingFingerprint: ChatViewModel {
+        let vm = ChatViewModel()
+        vm.webrtc.isConnected = true
+        vm.webrtc.isChatEnabled = false
+        vm.webrtc.dataChannelState = "создан (0)"
+        vm.webrtc.iceConnectionState = "1"
+        vm.webrtc.iceGatheringState = "2"
+        vm.webrtc.candidateCount = "3"
+        return vm
+    }
+}
