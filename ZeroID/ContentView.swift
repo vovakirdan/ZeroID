@@ -59,8 +59,8 @@ struct ContentView: View {
                         }
                     )
                     .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
                     ))
                     
                 case .settings:
@@ -84,8 +84,8 @@ struct ContentView: View {
                             }
                     )
                     .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
                     ))
                     
                 case .choice:
@@ -266,8 +266,8 @@ struct ContentView: View {
                             }
                     )
                     .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
                     ))
                     
                 case .fingerprintVerification:
@@ -282,8 +282,8 @@ struct ContentView: View {
                         }
                     )
                     .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
                     ))
                     
                 case .error(let error):
@@ -298,8 +298,8 @@ struct ContentView: View {
                         }
                     )
                     .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
+                        insertion: .move(edge: navDirection == .forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: navDirection == .forward ? .leading : .trailing).combined(with: .opacity)
                     ))
                 }
             
