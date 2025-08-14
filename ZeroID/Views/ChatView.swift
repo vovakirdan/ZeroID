@@ -11,6 +11,7 @@ struct ChatView: View {
     @State private var showConnectionInfo: Bool = false
     // Импорт файла
     @State private var showFileImporter: Bool = false
+    // Управление модальными состояниями — без ручной обработки клавиатуры
     
     // Единый градиентный фон чата (цвета берутся из Assets)
     private var chatBackground: some View {
@@ -242,32 +243,39 @@ struct ChatView: View {
     
     // Заголовок с кнопками Назад и Info
     private var headerView: some View {
-        HStack {
-            // Кнопка назад
-            Button(action: onBack) {
-                Image(systemName: "chevron.backward")
-                    .font(.title2)
-                    .foregroundColor(Color.accentColor)
+        VStack(spacing: 6) {
+            HStack {
+                // Кнопка назад
+                Button(action: onBack) {
+                    Image(systemName: "chevron.backward")
+                        .font(.title2)
+                        .foregroundColor(Color.accentColor)
+                }
+                Spacer()
+                Text("Секретный чат")
+                    .font(.headline)
+                    .foregroundColor(Color.textPrimary)
+                Spacer()
+                // Кнопка info
+                Button(action: { showConnectionInfo.toggle() }) {
+                    Image(systemName: "info.circle")
+                        .font(.title2)
+                        .foregroundColor(Color.accentColor)
+                }
             }
-            
-            Spacer()
-            
-            Text("Секретный чат")
-                .font(.headline)
-                .foregroundColor(Color.textPrimary)
-                .frame(maxWidth: .infinity)
-                .multilineTextAlignment(.center)
-            
-            Spacer()
-            
-            // Кнопка info
-            Button(action: { showConnectionInfo.toggle() }) {
-                Image(systemName: "info.circle")
-                    .font(.title2)
-                    .foregroundColor(Color.accentColor)
+            .padding(.horizontal)
+
+            // Статус соединения
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(vm.webrtc.isConnected && vm.webrtc.isChatEnabled ? Color.green : .orange)
+                    .frame(width: 8, height: 8)
+                Text(vm.webrtc.isConnected ? (vm.webrtc.isChatEnabled ? "Соединение активно" : "Ждём подтверждения отпечатков") : "Нет соединения")
+                    .font(.caption)
+                    .foregroundColor(.textSecondary)
             }
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal)
     }
     
     // Статус соединения для дебага (показываем, когда showConnectionInfo == true)
@@ -314,8 +322,8 @@ struct ChatView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { dismissKeyboard() }
         }
+        // Простая схема: безопасный inset поднимает input вместе с клавиатурой
         .safeAreaInset(edge: .bottom) { inputArea }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(chatBackground)
         .navigationBarHidden(true)
         .overlay(
@@ -347,22 +355,7 @@ struct ChatView: View {
                 print("[ChatView] File import error", err.localizedDescription)
             }
         }
-        // Индикатор статуса соединения
-        .overlay(alignment: .top) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(vm.webrtc.isConnected ? Color.green : Color.orange)
-                    .frame(width: 8, height: 80)
-                Text(vm.webrtc.isConnected ? (vm.webrtc.isChatEnabled ? "Соединение активно" : "Ждём подтверждения отпечатков") : "Нет соединения")
-                    .font(.caption2)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .background(Color.black.opacity(0.35))
-                    .cornerRadius(12)
-            }
-            .padding(.top, 6)
-        }
+        // Индикатор в хедере, верхний оверлей больше не нужен
     }
 }
 
@@ -386,6 +379,8 @@ struct RoundedCorner: Shape {
         return Path(path.cgPath)
     }
 }
+
+// Ручная обработка клавиатуры удалена — используем safeAreaInset
 
 // MARK: - Media bubble UI
 struct MediaBubbleView: View {
