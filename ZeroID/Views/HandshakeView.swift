@@ -148,7 +148,10 @@ struct HandshakeView: View {
         .background(Color.background)
         .navigationBarHidden(true)
         .sheet(isPresented: $showShareSheet) {
-            ActivityView(activityItems: shareItems)
+            // Перед первой демонстрацией UIActivityViewController иногда нет источника — указываем popover source
+            ActivityView(activityItems: shareItems) {
+                // Очистим ошибки/логи и закрытие обработаем тут при необходимости
+            }
         }
         .sheet(isPresented: $showQR, onDismiss: {
             UIScreen.main.brightness = previousBrightness
