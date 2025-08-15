@@ -155,8 +155,7 @@ final class ChatViewModel: ObservableObject {
         chatMessages.append(local)
 
         // Actual transport via your WebRTC pipe
-        webrtc.sendMediaFile(id: local.id, url: url, name: fileName, mime: mime) { [weak self] progress in
-            guard let self else { return }
+        webrtc.sendMediaFile(id: local.id, url: url, name: fileName, mime: mime) { progress in
             DispatchQueue.main.async {
                 // You can update a progress UI by editing a custom attachment later
                 print("[Upload] \(fileName) progress:", progress)

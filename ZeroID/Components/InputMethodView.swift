@@ -110,7 +110,7 @@ struct InputMethodView: View {
                 })
                 .ignoresSafeArea()
             }
-            .onChange(of: photoItem) { newItem in
+            .onChange(of: photoItem) { oldValue, newItem in
                 guard let newItem = newItem else { return }
                 Task {
                     showingTextInput = false
